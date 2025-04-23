@@ -1,5 +1,6 @@
 // src/components/Sidebar.jsx
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   HomeModernIcon,
   PlusCircleIcon,
@@ -8,85 +9,43 @@ import {
   TruckIcon,
   CubeTransparentIcon,
   UserIcon,
-} from '@heroicons/react/24/solid'; // Importa iconos
+} from '@heroicons/react/24/solid';
 
-function Sidebar({ setActiveComponent }) {
+const menuItems = [
+  { path: '/', label: 'Dashboard', icon: HomeModernIcon },
+  { path: '/proveedores', label: 'Proveedores', icon: UserGroupIcon },
+  { path: '/inventario', label: 'Inventario', icon: ListBulletIcon },
+  { path: '/bays', label: 'Bahías', icon: CubeTransparentIcon },
+  { path: '/vehicles', label: 'Vehículos', icon: TruckIcon },
+  { path: '/ingreso-salida', label: 'Entrada - Salida', icon: UserIcon },
+  { path: '/employees', label: 'Empleados', icon: UserIcon },
+];
+
+function Sidebar({ isOpen }) {
   return (
-    <aside className="bg-gray-800 text-white w-64 min-h-screen p-4">
-      <h2 className="text-xl font-bold mb-6 text-center">Menú</h2>
+    <aside
+      className={`bg-gray-800 text-white min-h-screen p-4 transition-all duration-300 ${
+        isOpen ? 'w-64' : 'w-16'
+      }`}
+    >
+      <h2 className={`text-xl font-bold mb-6 text-center ${!isOpen && 'hidden'}`}>Menú</h2>
       <nav>
         <ul className="space-y-2">
-          {/* Dashboard */}
-          <li>
-            <button
-              onClick={() => setActiveComponent('dashboard')}
-              className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-            >
-              <HomeModernIcon className="w-5 h-5 mr-2" />
-              Dashboard
-            </button>
-          </li>
-
-          {/* Proveedores */}
-          <li>
-            <button
-              onClick={() => setActiveComponent('proveedores')}
-              className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-            >
-              <UserGroupIcon className="w-5 h-5 mr-2" />
-              Proveedores
-            </button>
-          </li>
-
-          {/* Productos */}
-          <li>
-            <button
-              onClick={() => setActiveComponent('products')}
-              className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-            >
-              <ListBulletIcon className="w-5 h-5 mr-2" />
-              Productos
-            </button>
-          </li>
-
-          {/* Bahías */}
-          <li>
-            <button
-              onClick={() => setActiveComponent('bays')}
-              className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-            >
-              <CubeTransparentIcon className="w-5 h-5 mr-2" />
-              Bahías
-            </button>
-          </li>
-           {/* Vehiculos */}
-           <li>
-  <button
-    onClick={() => setActiveComponent('vehicles')}
-    className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-  >
-    <TruckIcon className="w-5 h-5 mr-2" /> {/* Usa un ícono de coche */}
-    Vehículos
-  </button>
-</li>
-<li>
-  <button
-    onClick={() => setActiveComponent('ingresoSalida')}
-    className="flex items-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-  >
-    <UserIcon className="w-5 h-5 mr-2" /> {/* Usa un ícono de usuario */}
-    Entrada - Salida
-  </button>
-</li>
-<li>
-  <button
-    onClick={() => setActiveComponent('employees')}
-    className="flex it  ems-center py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full text-left"
-  >
-    <UserIcon className="w-5 h-5 mr-2" /> {/* Usa un ícono de usuario */}
-    Empleados
-  </button>
-</li>
+          {menuItems.map(({ path, label, icon: Icon }) => (
+            <li key={path}>
+              <NavLink
+                to={path}
+                className={({ isActive }) =>
+                  `flex items-center py-2 px-4 rounded transition-colors w-full ${
+                    isActive ? 'bg-gray-700' : 'hover:bg-gray-700'
+                  }`
+                }
+              >
+                {Icon && <Icon className="w-5 h-5 mr-2" />}
+                <span className={`${!isOpen && 'hidden'}`}>{label}</span>
+              </NavLink>
+            </li>
+          ))}
         </ul>
       </nav>
     </aside>

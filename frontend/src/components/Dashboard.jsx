@@ -1,13 +1,38 @@
 // src/components/Dashboard.jsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ChartComponent from './ChartComponent';
+import { getDashboardStats } from '../utils/api/api';
+
+function StatCard({ title, value, color }) {
+  return (
+    <div className={`bg-white p-6 rounded-lg shadow-md flex flex-col items-center justify-center`}>
+      <h3 className="text-lg font-semibold text-gray-700">{title}</h3>
+      <p className={`text-3xl font-bold ${color}`}>{value}</p>
+    </div>
+  );
+}
 
 function Dashboard() {
-  // Datos ficticios para las tarjetas de estadísticas
-  const totalEmployees = 10; // Total de empleados
-  const totalProductsInStock = 120; // Total de productos en stock
-  const totalBaysOccupied = 4; // Total de bahías ocupadas
-  const totalVehiclesAssigned = 8; // Total de vehículos asignados
+  const [stats, setStats] = useState({
+    totalEmployees: 0,
+    totalProductsInStock: 0,
+    totalBaysOccupied: 0,
+    totalVehiclesAssigned: 0,
+  });
+
+  useEffect(() => {
+    // Cargar estadísticas del backend
+    const fetchStats = async () => {
+      try {
+        const data = await getDashboardStats();
+        setStats(data);
+      } catch (error) {
+        console.error("Error fetching dashboard stats:", error.message);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   return (
     <div className="p-6">
@@ -15,29 +40,10 @@ function Dashboard() {
 
       {/* Tarjetas de estadísticas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Empleados */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center justify-center">
-          <h3 className="text-lg font-semibold text-gray-700">Empleados</h3>
-          <p className="text-3xl font-bold text-indigo-600">{totalEmployees}</p>
-        </div>
-
-        {/* Productos en Stock */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center justify-center">
-          <h3 className="text-lg font-semibold text-gray-700">Productos en Stock</h3>
-          <p className="text-3xl font-bold text-green-600">{totalProductsInStock}</p>
-        </div>
-
-        {/* Bahías Ocupadas */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center justify-center">
-          <h3 className="text-lg font-semibold text-gray-700">Bahías Ocupadas</h3>
-          <p className="text-3xl font-bold text-blue-600">{totalBaysOccupied}</p>
-        </div>
-
-        {/* Vehículos Asignados */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col items-center justify-center">
-          <h3 className="text-lg font-semibold text-gray-700">Vehículos Asignados</h3>
-          <p className="text-3xl font-bold text-red-600">{totalVehiclesAssigned}</p>
-        </div>
+        <StatCard title="Empleados" value={stats.totalEmployees} color="text-indigo-600" />
+        <StatCard title="Productos en Stock" value={stats.totalProductsInStock} color="text-green-600" />
+        <StatCard title="Bahías Ocupadas" value={stats.totalBaysOccupied} color="text-blue-600" />
+        <StatCard title="Vehículos Asignados" value={stats.totalVehiclesAssigned} color="text-red-600" />
       </div>
 
       {/* Gráficos */}

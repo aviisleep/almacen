@@ -3,49 +3,112 @@ const Product = require('../models/product');
 // Obtener todos los productos
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    const { page = 1, limit = 10 } = req.query; // Valores predeterminados: página 1, 10 productos por página
+    const skip = (page - 1) * limit;
+
+    // Consulta para obtener los productos paginados
+    const products = await Product.find()
+      .limit(Number(limit)) // Limitar la cantidad de resultados
+      .skip(skip); // Saltar los resultados anteriores
+
+    // Contar el total de productos en la base de datos
+    const total = await Product.countDocuments();
+
+    // Calcular el número total de páginas
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      success: true,
+      data: products,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages,
+      },
+    });
   } catch (error) {
     console.error("Error al obtener productos:", error.message);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: "Error interno del servidor." });
   }
 }
 
 // Obtener un producto por ID
 const getProductById = async (req, res) => {
   try {
-    const product = await findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Producto no encontrado" });
-    res.json(product);
+    // Validar que el ID sea válido
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "ID de producto inválido" });
+    }
+
+    // Buscar el producto en la base de datos
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: `No se encontró un producto con el ID: ${req.params.id}` });
+    }
+
+    // Validar que el precio sea un número
+    if (typeof product.precio !== "number") {
+      product.precio = 0; // O cualquier valor predeterminado
+    }
+
+    // Respuesta exitosa
+    res.json({ success: true, data: product });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error al obtener el producto:", error.message);
+    res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
-}
+};
 
 // Crear un nuevo producto
-const createProduct = async (req, res) =>{
+const createProduct = async (req, res) => {
   try {
     const { nombre, descripcion, cantidad, precio, categoria } = req.body;
 
-    // Crear el producto sin incluir el SKU
-    const product = new Product({
-      nombre,
-      descripcion,
-      cantidad,
-      precio,
-      categoria,
-    });
+    // Validar campos obligatorios
+    if (!nombre || !cantidad || cantidad <= 0 || !precio || precio <= 0) {
+      return res.status(400).json({ 
+        message: "Nombre, cantidad y precio son obligatorios, y deben ser mayores a cero." 
+      });
+    }
 
-    console.log("Producto creado antes de guardar:", product);
+    // Buscar si el producto ya existe
+    let product = await Product.findOne({ nombre });
 
-    // Guardar el producto (el SKU se genera automáticamente)
-    const newProduct = await product.save();
+    if (product) {
+      // Si el producto ya existe, incrementar la cantidad
+      product.cantidad += cantidad;
+      product.historial.push({
+        accion: "Compra",
+        detalles: `Se agregaron ${cantidad} unidades al inventario.`,
+      });
+    } else {
+      // Si el producto no existe, crear uno nuevo
+      product = new Product({
+        nombre,
+        descripcion,
+        cantidad,
+        precio,
+        categoria,
+      });
+      product.historial.push({
+        accion: "Compra",
+        detalles: `Producto creado con ${cantidad} unidades y precio $${precio}.`,
+      });
+    }
+
+    // Guardar el producto (el SKU se genera automáticamente en el middleware pre('save'))
+    const savedProduct = await product.save();
 
     // Devolver el producto completo (incluyendo el SKU generado)
-    res.status(201).json(newProduct);
+    res.status(201).json({ 
+      message: "Producto agregado al inventario exitosamente", 
+      data: savedProduct 
+    });
   } catch (error) {
     console.error("Error al crear el producto:", error.message);
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: "Error interno del servidor." });
   }
 }
 
@@ -120,7 +183,139 @@ const updateProductQuantity = async (req, res) =>{
   }
 }
 
+// Agregar un producto al inventario (opcional, si se necesita)
+const addProductToInventory = async (req, res) => {
+  try {
+    const { nombre, descripcion, cantidad, categoria } = req.body;
 
+    // Validar campos obligatorios
+    if (!nombre || !cantidad || cantidad <= 0) {
+      return res.status(400).json({ message: "Nombre y cantidad son obligatorios, y la cantidad debe ser mayor a cero." });
+    }
+
+    // Buscar si el producto ya existe
+    let product = await Product.findOne({ nombre });
+
+    if (product) {
+      // Si el producto ya existe, incrementar la cantidad
+      product.cantidad += cantidad;
+      product.historial.push({
+        accion: "Compra",
+        detalles: `Se agregaron ${cantidad} unidades al inventario.`,
+      });
+    } else {
+      // Si el producto no existe, crear uno nuevo
+      product = new Product({
+        SKU: generateSKU(), // Función para generar SKU único
+        nombre,
+        descripcion,
+        cantidad,
+        categoria,
+      });
+      product.historial.push({
+        accion: "Compra",
+        detalles: `Producto creado con ${cantidad} unidades.`,
+      });
+    }
+
+    await product.save();
+    res.status(201).json({ message: "Producto agregado al inventario exitosamente", data: product });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// para devolver un producto al inventario
+const returnProductToInventory = async (req, res) => {
+  try {
+    const { productId } = req.params; // ID del producto
+    const { quantity, employeeId, vehicleId } = req.body;
+
+    // Validaciones
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: "ID de producto inválido" });
+    }
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
+    }
+
+    // Buscar el producto
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+
+    // Incrementar el stock del inventario
+    product.cantidad += quantity;
+    product.historial.push({
+      accion: "Devolución",
+      detalles: `Se devolvieron ${quantity} unidades al inventario.`,
+    });
+    await product.save();
+
+    // Si se proporciona un employeeId, actualizar su historial
+    if (employeeId && mongoose.Types.ObjectId.isValid(employeeId)) {
+      const employee = await Employee.findById(employeeId);
+      if (employee) {
+        const delivery = employee.deliveries.find((d) => d.productId.equals(productId));
+        if (delivery) {
+          delivery.quantity -= quantity; // Reducir la cantidad entregada
+          if (delivery.quantity <= 0) {
+            employee.deliveries.pull(delivery); // Eliminar si la cantidad llega a cero
+          }
+          await employee.save();
+        }
+      }
+    }
+
+    // Si se proporciona un vehicleId, actualizar su historial
+    if (vehicleId && mongoose.Types.ObjectId.isValid(vehicleId)) {
+      const vehicle = await Vehicle.findById(vehicleId);
+      if (vehicle) {
+        const assignedProduct = vehicle.productosAsignados.find((p) => p.productId.equals(productId));
+        if (assignedProduct) {
+          assignedProduct.cantidad -= quantity; // Reducir la cantidad asignada
+          if (assignedProduct.cantidad <= 0) {
+            vehicle.productosAsignados.pull(assignedProduct); // Eliminar si la cantidad llega a cero
+          }
+          await vehicle.save();
+        }
+      }
+    }
+
+    res.status(200).json({ message: "Producto devuelto exitosamente", data: product });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Obtener el historial de un producto
+const getProductHistory = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del producto
+
+    // Validar que el ID sea válido
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "ID de producto inválido" });
+    }
+
+    // Buscar el producto
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+
+    // Devolver el historial del producto
+    res.json({
+      success: true,
+      data: product.historial,
+    });
+  } catch (error) {
+    console.error("Error al obtener el historial del producto:", error.message);
+    res.status(500).json({ success: false, message: "Error interno del servidor." });
+  }
+};
 
 module.exports = {
   getProducts,
@@ -128,5 +323,8 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
-  updateProductQuantity
+  updateProductQuantity,
+  addProductToInventory,
+  returnProductToInventory,
+  getProductHistory
 }

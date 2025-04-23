@@ -12,10 +12,10 @@ const vehiculoSchema = new mongoose.Schema({
         message: props => `${props.value} no es una placa válida.`,
       },
     },
-    compañia: { type: String, required: true },
+    compañia: { type: String },
     tipoVehiculo: {
       type: String,
-      enum: ['Trailer', 'Van', 'Botellero'],
+      enum: ['Trailer', 'Van', 'Camion',  'Botellero'],
       required: true,
     },
     estado: {
@@ -32,13 +32,13 @@ const vehiculoSchema = new mongoose.Schema({
     productosAsignados: {
       type: [
         {
+          productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
           nombre: { type: String, required: true },
           cantidad: { type: Number, required: true },
           asignadoPor: { type: String, required: true },
           fechaAsignacion: { type: Date, default: Date.now },
         },
       ],
-      default: [], // Array vacío por defecto
     },
   });
   

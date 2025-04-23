@@ -5,7 +5,7 @@ const Vehicle = require('../models/Vehiculo');
 
 
 // Obtener todos los empleados
-const getAllEmployees = async (req, res) => {
+const getAllEmployees = async (req, res) => {  
   try {
     const employees = await Employee.find();
     res.status(200).json(employees);
@@ -33,7 +33,12 @@ const getEmployeeById = async (req, res) => {
 
 // Crear un nuevo empleado
 const createEmployee = async (req, res) => {
-  console.log("Datos recibidos:", req.body);
+  // Verificar errores de validación
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const { name } = req.body;
 
@@ -57,6 +62,11 @@ const createEmployee = async (req, res) => {
 
 // Actualizar un empleado
 const updateEmployee = async (req, res) => {
+  // Verificar errores de validación
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   try {
     const updatedEmployee = await Employee.findByIdAndUpdate(
       req.params.id,
@@ -76,6 +86,11 @@ const updateEmployee = async (req, res) => {
 
 // Eliminar un empleado
 const deleteEmployee = async (req, res) => {
+  // Verificar errores de validación
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   try {
     const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
     
@@ -91,6 +106,11 @@ const deleteEmployee = async (req, res) => {
 
 // Asignar vehículo a empleado
 const assignVehicleToEmployee = async (req, res) => {
+  // Verificar errores de validación
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   try {
     const { employeeId, vehicleId } = req.body;
 
@@ -137,61 +157,48 @@ const assignVehicleToEmployee = async (req, res) => {
 // Entregar producto a empleado
 const deliverProductToEmployee = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { productoId, cantidad } = req.body;
+    const { id } = req.params; // ID del empleado
+    const { productId, quantity, vehicleId } = req.body;
 
-    // Validaciones básicas
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(productoId)) {
-      return res.status(400).json({ success: false, message: 'IDs inválidos' });
-    }
-
-    if (cantidad <= 0) {
-      return res.status(400).json({ success: false, message: 'La cantidad debe ser mayor a cero' });
+    // Validaciones
+    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: "IDs inválidos" });
     }
 
     const [employee, product] = await Promise.all([
       Employee.findById(id),
-      Product.findById(productoId)
+      Product.findById(productId),
     ]);
 
     if (!employee || !product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `${!employee ? 'Empleado' : 'Producto'} no encontrado` 
-      });
+      return res.status(404).json({ message: `${!employee ? 'Empleado' : 'Producto'} no encontrado` });
     }
 
-    if (product.cantidad < cantidad) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No hay suficiente stock disponible' 
-      });
+    if (product.cantidad < quantity) {
+      return res.status(400).json({ message: "No hay suficiente stock disponible" });
     }
 
-    // Actualizar producto
-    product.cantidad -= cantidad;
+    // Reducir el stock del inventario
+    product.cantidad -= quantity;
+    product.historial.push({
+      accion: "Entrega a empleado",
+      detalles: `Entregado a ${employee.name} (${quantity} unidades), asociado al vehículo ${vehicleId}.`,
+    });
     await product.save();
 
-    // Registrar entrega
+    // Registrar la entrega en el empleado
     employee.deliveries.push({
       productId: product._id,
       productName: product.nombre,
-      quantity: cantidad,
-      date: new Date()
+      quantity,
+      vehicleId,
+      date: new Date(),
     });
-
     await employee.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'Producto asignado correctamente',
-      data: {
-        empleado: employee,
-        producto: product
-      }
-    });
+    res.status(200).json({ message: "Producto entregado exitosamente", data: { employee, product } });
   } catch (error) {
-    handleError(res, error, 'Error al asignar el producto');
+    res.status(500).json({ message: error.message });
   }
 };
 

@@ -1,5 +1,4 @@
 const express = require('express');
-
 const router = express.Router();
 const {
     getProducts,
@@ -7,7 +6,10 @@ const {
     createProduct,
     updateProduct,
     deleteProduct,
-    updateProductQuantity
+    updateProductQuantity,
+    addProductToInventory,
+    returnProductToInventory,
+    getProductHistory
 } = require('../controllers/productController');
 
 // Get all products
@@ -27,5 +29,14 @@ router.delete('/:id', deleteProduct);
 
 // Update product quantity by ID
 router.put('/:id/quantity', updateProductQuantity);
+
+// Add a product to inventory
+router.post('/add-to-inventory', addProductToInventory);
+
+// Return a product to inventory
+router.post('/return-to-inventory/:productId', returnProductToInventory);
+
+// Get product history by ID
+router.get('/:id/history', getProductHistory);
 
 module.exports = router;

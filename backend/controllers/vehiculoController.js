@@ -126,36 +126,52 @@ exports.assignEmpleadoToVehiculo = async (req, res) => {
 };
 
 // Asignar productos a un vehículo
-exports.assignProductosToVehiculo = async (req, res) => {
+exports.assignProductToVehicle = async (req, res) => {
     try {
-        const { id } = req.params; // ID del vehículo
-        const { productos } = req.body; // Array de productos a asignar
-
-        // Buscar el vehículo
-        const vehiculo = await Vehiculo.findById(id);
-        if (!vehiculo) {
-            return res.status(404).json({ message: "Vehículo no encontrado" });
-        }
-
-        // Validar que los productos sean un array
-        if (!Array.isArray(productos) || productos.length === 0) {
-            return res.status(400).json({ message: "Debes proporcionar un array de productos válido." });
-        }
-
-        // Agregar los productos al vehículo
-        vehiculo.productosAsignados.push(...productos.map((producto) => ({
-            nombre: producto.nombre,
-            cantidad: producto.cantidad,
-            asignadoPor: producto.asignadoPor,
-        })));
-
-        // Guardar el vehículo actualizado
-        const vehiculoActualizado = await vehiculo.save();
-        res.json(vehiculoActualizado);
+      const { id } = req.params; // ID del vehículo
+      const { productId, quantity, assignedBy } = req.body;
+  
+      // Validaciones
+      if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(productId)) {
+        return res.status(400).json({ message: "IDs inválidos" });
+      }
+  
+      const [vehicle, product] = await Promise.all([
+        Vehicle.findById(id),
+        Product.findById(productId),
+      ]);
+  
+      if (!vehicle || !product) {
+        return res.status(404).json({ message: `${!vehicle ? 'Vehículo' : 'Producto'} no encontrado` });
+      }
+  
+      if (product.cantidad < quantity) {
+        return res.status(400).json({ message: "No hay suficiente stock disponible" });
+      }
+  
+      // Actualizar inventario
+      product.cantidad -= quantity;
+      product.historial.push({
+        accion: "Asignación a vehículo",
+        detalles: `Asignado a vehículo ${vehicle.placa} (${quantity} unidades)`,
+      });
+      await product.save();
+  
+      // Registrar asignación en el vehículo
+      vehicle.productosAsignados.push({
+        productId: product._id,
+        nombre: product.nombre,
+        cantidad: quantity,
+        asignadoPor: assignedBy,
+        fechaAsignacion: new Date(),
+      });
+      await vehicle.save();
+  
+      res.status(200).json({ message: "Producto asignado al vehículo exitosamente", data: { vehicle, product } });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+      res.status(500).json({ message: error.message });
     }
-};
+  };
 
 // Cambiar el estado de un vehículo
 exports.updateEstadoVehiculo = async (req, res) => {
