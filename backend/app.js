@@ -8,7 +8,8 @@ connectDB();
 
 const app = express();
 
-// Middleware
+
+// Middleware  
 app.use(cors()); // Habilita CORS para todas las rutas
 app.use(express.json());
 

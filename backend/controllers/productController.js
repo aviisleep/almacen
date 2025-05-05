@@ -3,36 +3,60 @@ const Product = require('../models/product');
 // Obtener todos los productos
 const getProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query; // Valores predeterminados: página 1, 10 productos por página
+    const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
     // Consulta para obtener los productos paginados
     const products = await Product.find()
-      .limit(Number(limit)) // Limitar la cantidad de resultados
-      .skip(skip); // Saltar los resultados anteriores
+      .limit(Number(limit))
+      .skip(skip);
 
     // Contar el total de productos en la base de datos
     const total = await Product.countDocuments();
-
-    // Calcular el número total de páginas
     const totalPages = Math.ceil(total / limit);
+
+    // Agregar numeración secuencial a cada producto
+    const enumeratedProducts = products.map((product, index) => ({
+      ...product.toObject(),
+      itemNumber: skip + index + 1, // Número secuencial global
+    }));
 
     res.json({
       success: true,
-      data: products,
+      data: enumeratedProducts,
       pagination: {
         total,
         page: Number(page),
         limit: Number(limit),
         totalPages,
+        currentItems: products.length,
       },
     });
   } catch (error) {
     console.error("Error al obtener productos:", error.message);
-    res.status(500).json({ success: false, message: "Error interno del servidor." });
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor." 
+    });
   }
 }
-
+// Nuevo controlador para contar productos
+const countProducts = async (req, res) => {
+  try {
+    const total = await Product.countDocuments({});
+    res.json({ 
+      success: true,
+      total 
+    });
+  } catch (error) {
+    console.error("Error counting products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al contar productos",
+      error: error.message
+    });
+  }
+};
 // Obtener un producto por ID
 const getProductById = async (req, res) => {
   try {
@@ -317,6 +341,8 @@ const getProductHistory = async (req, res) => {
   }
 };
 
+
+
 module.exports = {
   getProducts,
   getProductById,
@@ -326,5 +352,6 @@ module.exports = {
   updateProductQuantity,
   addProductToInventory,
   returnProductToInventory,
-  getProductHistory
+  getProductHistory,
+  countProducts
 }

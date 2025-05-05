@@ -1,204 +1,229 @@
+// controllers/employeeController.js
 const mongoose = require('mongoose');
 const Employee = require('../models/Employee');
 const Product = require('../models/Product');
-const Vehicle = require('../models/Vehiculo');
+const { validationResult } = require('express-validator');
 
+
+
+// Función reutilizable para responder
+const sendResponse = (res, status, data) => {
+  return res.status(status).json({
+    success: status < 400,
+    ...data
+  });
+};
+
+// Función reutilizable para manejar errores
+const handleError = (res, error, defaultMessage = "Error interno del servidor") => {
+  console.error(defaultMessage, error);
+  return sendResponse(res, 500, {
+    message: defaultMessage,
+    error: error.message
+  });
+};
 
 // Obtener todos los empleados
-const getAllEmployees = async (req, res) => {  
+const getAllEmployees = async (req, res) => {
   try {
     const employees = await Employee.find();
     res.status(200).json(employees);
   } catch (error) {
-    res.status(500).json({ mensaje: 'Error al obtener los empleados.', error: error.message });
+    res.status(500).json({ message: "Error al obtener empleados", employees: [] });
   }
 };
 
-// Obtener un empleado por ID
+// Obtener empleado por ID
 const getEmployeeById = async (req, res) => {
   try {
     const employee = await Employee.findById(req.params.id)
       .populate('vehicles.vehicleId')
       .populate('deliveries.productId');
-    
+
     if (!employee) {
-      return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
+      return sendResponse(res, 404, { message: "Empleado no encontrado" });
     }
-    
-    res.status(200).json({ success: true, data: employee });
+
+    return sendResponse(res, 200, {
+      message: "Empleado obtenido exitosamente",
+      data: employee
+    });
   } catch (error) {
-    handleError(res, error, 'Error al obtener el empleado');
+    return handleError(res, error, "Error al obtener el empleado");
   }
 };
 
 // Crear un nuevo empleado
 const createEmployee = async (req, res) => {
-  // Verificar errores de validación
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return sendResponse(res, 400, { 
+      message: "Errores de validación", 
+      errors: errors.array() 
+    });
   }
 
   try {
-    const { name } = req.body;
+    const { 
+      name, 
+      email, 
+      phone, 
+      position, 
+      Birthday,
+      vehicles,
+      deliveries
+    } = req.body;
 
-    // Validar que el nombre esté presente
-    if (!name || name.trim() === "") {
-      return res.status(400).json({ message: "El nombre del empleado es obligatorio." });
+    // Validación de campos obligatorios
+    if (!name || !position) {
+      return sendResponse(res, 400, { 
+        message: "Nombre y cargo son campos obligatorios" 
+      });
     }
 
-    // Crear el nuevo empleado
+    // Crear nuevo empleado con todos los campos
     const newEmployee = new Employee({
       name,
+      email: email || null,
+      phone: phone || null,
+      position,
+      Birthday: Birthday || null,
+      vehicles: vehicles || [],
+      deliveries: deliveries || []
     });
 
     const savedEmployee = await newEmployee.save();
-    res.status(201).json(savedEmployee);
+
+    return sendResponse(res, 201, {
+      message: "Empleado creado exitosamente",
+      data: savedEmployee
+    });
+
   } catch (error) {
-    console.error("Error al crear el empleado:", error.message);
-    res.status(500).json({ message: "Error interno del servidor." });
+    return handleError(res, error, "Error al crear el empleado");
   }
 };
 
-// Actualizar un empleado
+// Actualizar empleado
 const updateEmployee = async (req, res) => {
-  // Verificar errores de validación
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
+
   try {
+    const { name, email, phone, position, birthDate } = req.body;
+    
     const updatedEmployee = await Employee.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { 
+        name,
+        email: email || null,
+        phone: phone || null,
+        position,
+        birthDate: birthDate || null 
+      },
       { new: true, runValidators: true }
     );
-    
+
     if (!updatedEmployee) {
-      return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
+      return res.status(404).json({ message: "Empleado no encontrado" });
     }
-    
-    res.status(200).json({ success: true, data: updatedEmployee });
+
+    res.json({
+      success: true,
+      message: "Empleado actualizado correctamente",
+      data: updatedEmployee
+    });
+
   } catch (error) {
-    handleError(res, error, 'Error al actualizar el empleado');
+    console.error("Error al actualizar empleado:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Error al actualizar empleado",
+      error: error.message 
+    });
   }
 };
 
-// Eliminar un empleado
+// Eliminar empleado
 const deleteEmployee = async (req, res) => {
-  // Verificar errores de validación
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
   try {
     const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
-    
+
     if (!deletedEmployee) {
-      return res.status(404).json({ success: false, message: 'Empleado no encontrado' });
-    }
-    
-    res.status(200).json({ success: true, message: 'Empleado eliminado correctamente' });
-  } catch (error) {
-    handleError(res, error, 'Error al eliminar el empleado');
-  }
-};
-
-// Asignar vehículo a empleado
-const assignVehicleToEmployee = async (req, res) => {
-  // Verificar errores de validación
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  try {
-    const { employeeId, vehicleId } = req.body;
-
-    // Validaciones
-    if (!mongoose.Types.ObjectId.isValid(employeeId) || !mongoose.Types.ObjectId.isValid(vehicleId)) {
-      return res.status(400).json({ success: false, message: 'IDs inválidos' });
+      return sendResponse(res, 404, { message: "Empleado no encontrado" });
     }
 
-    const [employee, vehicle] = await Promise.all([
-      Employee.findById(employeeId),
-      Vehiculo.findById(vehicleId)
-    ]);
-
-    if (!employee || !vehicle) {
-      return res.status(404).json({ 
-        success: false, 
-        message: `${!employee ? 'Empleado' : 'Vehículo'} no encontrado` 
-      });
-    }
-
-    // Verificar si ya está asignado
-    const isAssigned = employee.vehicles.some(v => v.vehicleId.equals(vehicle._id));
-    if (isAssigned) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'El vehículo ya está asignado a este empleado' 
-      });
-    }
-
-    // Asignar vehículo
-    employee.vehicles.push({ vehicleId: vehicle._id });
-    await employee.save();
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'Vehículo asignado correctamente',
-      data: employee 
+    return sendResponse(res, 200, {
+      message: "Empleado eliminado correctamente"
     });
+
   } catch (error) {
-    handleError(res, error, 'Error al asignar el vehículo');
+    return handleError(res, error, "Error al eliminar el empleado");
   }
 };
 
-// Entregar producto a empleado
-const deliverProductToEmployee = async (req, res) => {
+// Asignar producto a empleado
+const assignProductToEmployee = async (req, res) => {
+  const errors = validationResult(req);
   try {
-    const { id } = req.params; // ID del empleado
-    const { productId, quantity, vehicleId } = req.body;
-
-    // Validaciones
-    if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(productId)) {
-      return res.status(400).json({ message: "IDs inválidos" });
+    const { empleadoId, productId, productName, cantidad } = req.body;
+    if (!empleadoId || !productId || !cantidad) {
+      return sendResponse(res, 400, { message: "Faltan campos requeridos" });
     }
-
+  // Validación de IDs
+    if (
+      !mongoose.Types.ObjectId.isValid(empleadoId) ||
+      !mongoose.Types.ObjectId.isValid(productId)
+    ) {
+      return sendResponse(res, 400, { message: "IDs inválidos" });
+    }
+ // Obtener empleado y producto en paralelo
     const [employee, product] = await Promise.all([
-      Employee.findById(id),
-      Product.findById(productId),
+      Employee.findById(empleadoId),
+      Product.findById(productId)
     ]);
 
     if (!employee || !product) {
-      return res.status(404).json({ message: `${!employee ? 'Empleado' : 'Producto'} no encontrado` });
+      return sendResponse(res, 404, {
+        message: !employee ? "Empleado no encontrado" : "Producto no encontrado"
+      });
     }
 
-    if (product.cantidad < quantity) {
-      return res.status(400).json({ message: "No hay suficiente stock disponible" });
+    if (product.cantidad < cantidad) {
+      return sendResponse(res, 400, { message: `No hay suficiente stock. Disponible: ${product.cantidad}` });
     }
 
-    // Reducir el stock del inventario
-    product.cantidad -= quantity;
+    // Reducir stock del producto
+    product.cantidad -= cantidad;
     product.historial.push({
       accion: "Entrega a empleado",
-      detalles: `Entregado a ${employee.name} (${quantity} unidades), asociado al vehículo ${vehicleId}.`,
+      detalles: `Entregado a ${employee.name} (${cantidad} unidades).`,
+      fecha: new Date()
     });
     await product.save();
 
-    // Registrar la entrega en el empleado
+    // Registrar entrega en el empleado
     employee.deliveries.push({
       productId: product._id,
-      productName: product.nombre,
-      quantity,
-      vehicleId,
-      date: new Date(),
+      productName: productName || product.nombre,
+      cantidad: cantidad,
+      date: new Date()
     });
-    await employee.save();
+    await Promise.all([product.save(), employee.save()]);
 
-    res.status(200).json({ message: "Producto entregado exitosamente", data: { employee, product } });
+    return sendResponse(res, 200, {
+      message: "Producto asignado correctamente",
+      data: { 
+        employee: employee.name,
+        product: product.nombre,
+        cantidad: cantidad 
+      }
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return handleError(res, error, "Error al asignar producto");
   }
 };
 
@@ -208,6 +233,5 @@ module.exports = {
   createEmployee,
   updateEmployee,
   deleteEmployee,
-  assignVehicleToEmployee,
-  deliverProductToEmployee
+  assignProductToEmployee
 };

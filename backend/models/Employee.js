@@ -2,23 +2,15 @@ const mongoose = require('mongoose');
 
 const employeeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, trim: true },
-  phone: { type: String, required: true, trim: true },
-  happyBirthday: { type: Date, required: true },
+  email: { type: String, unique: true, trim: true },
+  phone: { type: String, trim: true },
+  birthDate: { type: Date, default: Date.now },
   position: { type: String, required: true, trim: true },
-   
-  vehicles: [
-    {
-      vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle' },
-      assignedDate: { type: Date, default: Date.now },
-    },
-  ],
   deliveries: [
     {
       productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
       productName: { type: String, required: true },
-      quantity: { type: Number, required: true },
-      vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vehicle' }, // Vehículo asociado
+      cantidad: { type: Number, required: true },
       date: { type: Date, default: Date.now },
     },
   ],

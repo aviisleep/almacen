@@ -1,54 +1,77 @@
-const express = require('express');
-const { body, param, validationResult } = require('express-validator');
-const employeesController = require('../controllers/employeesController');
+// routes/employeesRoutes.js
+
+const express = require("express");
+const { body, param, validationResult } = require("express-validator");
+const employeesController = require("../controllers/employeesController");
 
 const router = express.Router();
+const asyncHandler = require("../utils/asyncHandler");
 
-// Get all employees
+// Middleware para validar resultados
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
+
+// Obtener todos los empleados
 router.get('/', employeesController.getAllEmployees);
 
-// Get a single employee by ID
-router.get('/:id', employeesController.getEmployeeById);
+// Obtener un empleado por ID
+router.get(
+  '/:id',
+  asyncHandler(employeesController.getEmployeeById)
+);
 
-// Create a new employee
+// Crear un nuevo empleado con validación
 router.post(
-    '/',
-    [
-      body('name')
-        .notEmpty()
-        .withMessage('El nombre del empleado es obligatorio.')
-        .trim(), // Elimina espacios innecesarios
-    ],
-    employeesController.createEmployee
-  );
+  "/",
+  [
+    body('name').notEmpty().withMessage('El nombre es requerido'),
+  body('position').notEmpty().withMessage('El cargo es requerido'),
+  body('email').optional().isEmail().withMessage('Email no válido'),
+  body('phone').optional().isMobilePhone().withMessage('Teléfono no válido'),
+  body('Birthday').optional().isISO8601().withMessage('Fecha no válida')
+  ],
+  validate,
+  employeesController.createEmployee
+);
 
-// Update an employee by ID
-router.put('/:id', employeesController.updateEmployee);
-
-// Delete an employee by ID
-router.delete('/:id', employeesController.deleteEmployee);
-
-// Entregar un producto a un empleado
-router.post(
-    '/:id/deliver-product',
-    [
-      param('id').isMongoId().withMessage('ID de empleado inválido'),
-      body('productoId').isMongoId().withMessage('ID de producto inválido'),
-      body('cantidad')
-        .isInt({ min: 1 })
-        .withMessage('La cantidad debe ser un número positivo'),
-    ],
-    employeesController.deliverProductToEmployee
-  );
-
-// Asignar un vehículo a un empleado
+// Actualizar un empleado por ID
 router.put(
-    '/:id/asignar-employee',
-    [
-      param('id').isMongoId().withMessage('ID de empleado inválido'),
-      body('vehicleId').isMongoId().withMessage('ID de vehículo inválido'),
-    ],
-    employeesController.assignVehicleToEmployee
-  );
+  "/:id",
+  [
+    param("id").isMongoId().withMessage("ID de empleado inválido"),
+    body("name").optional().trim(),
+    body("email").optional().isEmail().withMessage("Correo electrónico inválido."),
+    body("position").optional().trim(),
+  ],
+  validate,
+  employeesController.updateEmployee
+);
+
+// Eliminar un empleado por ID
+router.delete(
+  "/:id",
+  [
+    param("id").isMongoId().withMessage("ID de empleado inválido"),
+  ],
+  validate,
+  employeesController.deleteEmployee
+);
+
+// Entregar producto a un empleado
+router.post(
+  "/deliver-product",
+  [
+    body("empleadoId").isMongoId().withMessage("ID de empleado inválido"),
+    body("productId").isMongoId().withMessage("ID de producto inválido"),
+    body("cantidad").isInt({ min: 1 }).withMessage("Cantidad debe ser mayor a 0")
+  ],
+  validate,
+  employeesController.assignProductToEmployee
+);
 
 module.exports = router;

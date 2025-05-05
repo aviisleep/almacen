@@ -9,11 +9,15 @@ const {
     updateProductQuantity,
     addProductToInventory,
     returnProductToInventory,
-    getProductHistory
+    getProductHistory,
+    countProducts
 } = require('../controllers/productController');
 
 // Get all products
 router.get('/', getProducts);
+
+// Get the count of products
+router.get('/count', countProducts);
 
 // Get a single product by ID
 router.get('/:id', getProductById);
