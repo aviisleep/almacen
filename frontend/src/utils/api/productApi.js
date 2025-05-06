@@ -24,7 +24,7 @@ export const getProductById = async (productId) => {
 
 // Crear un nuevo producto
 export const createProduct = async (productData) => {
-  const response = await fetch(`${BASE_URL}/products/add-to-inventory`, {
+  const response = await fetch(`${BASE_URL}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(productData),
@@ -38,16 +38,6 @@ export const updateProduct = async (productId, updatedData) => {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updatedData),
-  });
-  return handleResponse(response);
-};
-
-// Entregar producto a empleado
-export const deliverProductToEmployee = async (employeeId, deliveryData) => {
-  const response = await fetch(`${BASE_URL}/employees/${employeeId}/deliver-product`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(deliveryData),
   });
   return handleResponse(response);
 };
@@ -71,11 +61,11 @@ export const deleteProduct = async (productId) => {
 };
 
 // Actualizar cantidad de un producto
-export const updateProductQuantity = async (productId, quantityData) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}/quantity`, {
+export const updateProductQuantity = async (productId, cantidadData) => {
+  const response = await fetch(`${BASE_URL}/products/${productId}/cantidad`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(quantityData),
+    body: JSON.stringify(cantidadData),
   });
   return handleResponse(response);
 };
