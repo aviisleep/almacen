@@ -15,3 +15,15 @@ export const getDashboardStats = async () => {
   const response = await fetch(`${BASE_URL}/dashboard-stats`);
   return handleResponse(response);
 };
+
+// Obtener conteo de productos
+export const getProductCount = async () => {
+  try {
+    const response = await fetch(`${BASE_URL}/products/count`);
+    const data = await handleResponse(response);
+    return data.total; // Asegúrate que tu backend devuelve {total: number}
+  } catch (error) {
+    console.error("Error fetching product count:", error);
+    return 0; // Valor por defecto en caso de error
+  }
+};
