@@ -1,77 +1,44 @@
-// src/utils/api.js
-const BASE_URL = 'http://localhost:5000/api'; // URL base del backend
+// src/utils/productsApi.js
+import { api } from './api';
 
-// Función genérica para manejar errores
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Ocurrió un error en la solicitud.');
-  }
-  return response.json();
-};
 
-// Obtener productos paginados
 export const getProducts = async (page = 1, limit = 10) => {
-  const response = await fetch(`${BASE_URL}/products?page=${page}&limit=${limit}`);
-  return handleResponse(response);
-};
+    const response = await api.get('/products', { params: { page, limit } });
+    return response.data;
+  }
 
-// Obtener un solo producto por ID
-export const getProductById = async (productId) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}`);
-  return handleResponse(response);
-};
+export const getById = async (id) => {
+    const response = await api.get(`/products/${id}`);
+    return response.data;
+  }
 
-// Crear un nuevo producto
-export const createProduct = async (productData) => {
-  const response = await fetch(`${BASE_URL}/products`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(productData),
-  });
-  return handleResponse(response);
-};
+export const createProduct = async (data) => {
+    const response = await api.post('/products', data);
+    return response.data;
+  }
 
-// Actualizar un producto existente
-export const updateProduct = async (productId, updatedData) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updatedData),
-  });
-  return handleResponse(response);
-};
+  export const update = async (id, data) => {
+    const response = await api.put(`/products/${id}`, data);
+    return response.data;
+  }
 
-// Devolver producto al inventario
-export const returnProductToInventory = async (productId, returnData) => {
-  const response = await fetch(`${BASE_URL}/products/return-to-inventory/${productId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(returnData),
-  });
-  return handleResponse(response);
-};
+  export const deleteProduct = async (id) => {
+    const response = await api.delete(`/products/${id}`);
+    return response.data;
+  }
 
-// Eliminar un producto
-export const deleteProduct = async (productId) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}`, {
-    method: 'DELETE',
-  });
-  return handleResponse(response);
-};
+  export const returnToInventory = async (id, returnData) => {
+    const response = await api.post(`/products/return-to-inventory/${id}`, returnData);
+    return response.data;
+  }
 
-// Actualizar cantidad de un producto
-export const updateProductQuantity = async (productId, cantidadData) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}/cantidad`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cantidadData),
-  });
-  return handleResponse(response);
-};
+  export const updateQuantity = async (id, quantityData) => {
+    const response = await api.put(`/products/${id}/cantidad`, quantityData);
+    return response.data;
+  }
 
-// Obtener historial de movimientos de un producto
-export const getProductHistory = async (productId) => {
-  const response = await fetch(`${BASE_URL}/products/${productId}/history`);
-  return handleResponse(response);
-};
+  export const getHistory = async (id) => {
+    const response = await api.get(`/products/${id}/history`);
+    return response.data;
+  }
+

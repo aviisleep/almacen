@@ -19,6 +19,7 @@ const menuItems = [
   { path: '/vehicles', label: 'Vehículos', icon: TruckIcon },
   { path: '/ingreso-salida', label: 'Entrada - Salida', icon: UserIcon },
   { path: '/employees', label: 'Empleados', icon: UserIcon },
+  { path: '/ingresos', label: 'Entrada', icon: UserIcon },
 ];
 
 function Sidebar({ isOpen }) {

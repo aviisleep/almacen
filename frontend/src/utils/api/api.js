@@ -1,29 +1,31 @@
 // src/utils/api.js
-const BASE_URL = 'http://localhost:5000/api'; // URL base del backend
+import axios from 'axios';
 
-// Función genérica para manejar errores
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Ocurrió un error en la solicitud.');
+export const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+  headers: {
+    'Content-Type': 'application/json'
   }
-  return response.json();
-};
+});
 
-// Obtener estadísticas del dashboard
+// Interceptor para manejar errores de forma global
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error('API error:', error.response.status, error.response.data);
+      return Promise.reject(error.response.data);
+    } else if (error.request) {
+      console.error('No se recibió respuesta:', error.request);
+      return Promise.reject({ message: 'No se pudo conectar al servidor' });
+    } else {
+      console.error('Error al configurar la solicitud:', error.message);
+      return Promise.reject({ message: error.message });
+    }
+  }
+);
+
 export const getDashboardStats = async () => {
-  const response = await fetch(`${BASE_URL}/dashboard-stats`);
-  return handleResponse(response);
-};
-
-// Obtener conteo de productos
-export const getProductCount = async () => {
-  try {
-    const response = await fetch(`${BASE_URL}/products/count`);
-    const data = await handleResponse(response);
-    return data.total; // Asegúrate que tu backend devuelve {total: number}
-  } catch (error) {
-    console.error("Error fetching product count:", error);
-    return 0; // Valor por defecto en caso de error
-  }
+  const response = await api.get('/dashboard-stats');
+  return response.data;
 };
