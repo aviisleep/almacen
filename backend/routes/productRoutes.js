@@ -6,7 +6,7 @@ const {
     createProduct,
     updateProduct,
     deleteProduct,
-    updateProductQuantity,
+    updateProductcantidad,
     addProductToInventory,
     returnProductToInventory,
     getProductHistory,
@@ -31,8 +31,8 @@ router.put('/:id', updateProduct);
 // Delete a product by ID
 router.delete('/:id', deleteProduct);
 
-// Update product quantity by ID
-router.put('/:id/quantity', updateProductQuantity);
+// Update product cantidad by ID
+router.put('/:id/cantidad', updateProductcantidad);
 
 // Add a product to inventory
 router.post('/add-to-inventory', addProductToInventory);

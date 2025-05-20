@@ -20,6 +20,7 @@ const menuItems = [
   { path: '/ingreso-salida', label: 'Entrada - Salida', icon: UserIcon },
   { path: '/employees', label: 'Empleados', icon: UserIcon },
   { path: '/ingresos', label: 'Entrada', icon: UserIcon },
+  { path: '/cotizaciones', label: 'Cotizaciones', icon: PlusCircleIcon },
 ];
 
 function Sidebar({ isOpen }) {

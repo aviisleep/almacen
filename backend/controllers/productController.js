@@ -188,24 +188,35 @@ const deleteProduct = async (req, res) =>{
 }
 
 // Actualizar la cantidad del producto
-const updateProductQuantity = async (req, res) =>{
+const updateProductcantidad = async (req, res) => {
   const { id } = req.params;
   const { cantidad } = req.body;
 
   try {
-    const product = await findById(id);
-    if (!product) {
-      return res.status(404).json({ message: 'Producto no encontrado' });
+    // Validar que la cantidad sea un número positivo
+    if (!cantidad || cantidad <= 0) {
+      return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
     }
 
+    // Buscar el producto por ID
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+
+    // Actualizar la cantidad del producto
     product.cantidad = cantidad;
+
+    // Guardar los cambios en la base de datos
     await product.save();
 
+    // Devolver el producto actualizado
     res.status(200).json(product);
   } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar el producto', error });
+    console.error("Error al actualizar la cantidad del producto:", error.message);
+    res.status(500).json({ message: "Error al actualizar el producto", error: error.message });
   }
-}
+};
 
 // Agregar un producto al inventario (opcional, si se necesita)
 const addProductToInventory = async (req, res) => {
@@ -253,14 +264,14 @@ const addProductToInventory = async (req, res) => {
 const returnProductToInventory = async (req, res) => {
   try {
     const { productId } = req.params; // ID del producto
-    const { quantity, employeeId, vehicleId } = req.body;
+    const { cantidad, employeeId, vehicleId } = req.body;
 
     // Validaciones
     if (!mongoose.Types.ObjectId.isValid(productId)) {
       return res.status(400).json({ message: "ID de producto inválido" });
     }
 
-    if (!quantity || quantity <= 0) {
+    if (!cantidad || cantidad <= 0) {
       return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
     }
 
@@ -271,10 +282,10 @@ const returnProductToInventory = async (req, res) => {
     }
 
     // Incrementar el stock del inventario
-    product.cantidad += quantity;
+    product.cantidad += cantidad;
     product.historial.push({
       accion: "Devolución",
-      detalles: `Se devolvieron ${quantity} unidades al inventario.`,
+      detalles: `Se devolvieron ${cantidad} unidades al inventario.`,
     });
     await product.save();
 
@@ -284,8 +295,8 @@ const returnProductToInventory = async (req, res) => {
       if (employee) {
         const delivery = employee.deliveries.find((d) => d.productId.equals(productId));
         if (delivery) {
-          delivery.quantity -= quantity; // Reducir la cantidad entregada
-          if (delivery.quantity <= 0) {
+          delivery.cantidad -= cantidad; // Reducir la cantidad entregada
+          if (delivery.cantidad <= 0) {
             employee.deliveries.pull(delivery); // Eliminar si la cantidad llega a cero
           }
           await employee.save();
@@ -299,7 +310,7 @@ const returnProductToInventory = async (req, res) => {
       if (vehicle) {
         const assignedProduct = vehicle.productosAsignados.find((p) => p.productId.equals(productId));
         if (assignedProduct) {
-          assignedProduct.cantidad -= quantity; // Reducir la cantidad asignada
+          assignedProduct.cantidad -= cantidad; // Reducir la cantidad asignada
           if (assignedProduct.cantidad <= 0) {
             vehicle.productosAsignados.pull(assignedProduct); // Eliminar si la cantidad llega a cero
           }
@@ -349,7 +360,7 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
-  updateProductQuantity,
+  updateProductcantidad,
   addProductToInventory,
   returnProductToInventory,
   getProductHistory,

@@ -8,7 +8,7 @@ const baySchema = new mongoose.Schema({
       products: [
         {
           productName: String,
-          quantity: Number,
+          cantidad: Number,
         },
       ],
     },

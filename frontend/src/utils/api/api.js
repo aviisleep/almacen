@@ -1,31 +1,66 @@
-// src/utils/api.js
 import axios from 'axios';
 
-export const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
-  headers: {
-    'Content-Type': 'application/json'
-  }
+// Configuración base de Axios
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  timeout: 10000,
 });
 
-// Interceptor para manejar errores de forma global
+// Interceptor para requests
+api.interceptors.request.use(
+  (config) => {
+    // Configuración automática de headers según el tipo de datos
+    if (config.data instanceof FormData) {
+      config.headers['Content-Type'] = 'multipart/form-data';
+    } else {
+      config.headers['Content-Type'] = 'application/json';
+    }
+    
+    // Agregar token de autenticación si existe
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor para responses
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      console.error('API error:', error.response.status, error.response.data);
-      return Promise.reject(error.response.data);
+      // Error con respuesta del servidor
+      const errorData = {
+        status: error.response.status,
+        message: error.response.data?.message || 'Error en la solicitud',
+        data: error.response.data,
+      };
+      console.error('API Error:', errorData);
+      return Promise.reject(errorData);
     } else if (error.request) {
-      console.error('No se recibió respuesta:', error.request);
-      return Promise.reject({ message: 'No se pudo conectar al servidor' });
+      // Error sin respuesta del servidor
+      const errorData = {
+        message: 'No se pudo conectar al servidor',
+        isConnectionError: true,
+      };
+      console.error('Connection Error:', errorData);
+      return Promise.reject(errorData);
     } else {
-      console.error('Error al configurar la solicitud:', error.message);
+      // Error en configuración de la solicitud
+      console.error('Request Error:', error.message);
       return Promise.reject({ message: error.message });
     }
   }
 );
 
 export const getDashboardStats = async () => {
-  const response = await api.get('/dashboard-stats');
+  const response = await axios.get('/api/dashboard-stats'); // Ajusta la ruta si es necesario
   return response.data;
 };
+
+export default api;

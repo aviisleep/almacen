@@ -129,7 +129,7 @@ exports.assignEmpleadoToVehiculo = async (req, res) => {
 exports.assignProductToVehicle = async (req, res) => {
     try {
       const { id } = req.params; // ID del vehículo
-      const { productId, quantity, assignedBy } = req.body;
+      const { productId, cantidad, assignedBy } = req.body;
   
       // Validaciones
       if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(productId)) {
@@ -145,15 +145,15 @@ exports.assignProductToVehicle = async (req, res) => {
         return res.status(404).json({ message: `${!vehicle ? 'Vehículo' : 'Producto'} no encontrado` });
       }
   
-      if (product.cantidad < quantity) {
+      if (product.cantidad < cantidad) {
         return res.status(400).json({ message: "No hay suficiente stock disponible" });
       }
   
       // Actualizar inventario
-      product.cantidad -= quantity;
+      product.cantidad -= cantidad;
       product.historial.push({
         accion: "Asignación a vehículo",
-        detalles: `Asignado a vehículo ${vehicle.placa} (${quantity} unidades)`,
+        detalles: `Asignado a vehículo ${vehicle.placa} (${cantidad} unidades)`,
       });
       await product.save();
   
@@ -161,7 +161,7 @@ exports.assignProductToVehicle = async (req, res) => {
       vehicle.productosAsignados.push({
         productId: product._id,
         nombre: product.nombre,
-        cantidad: quantity,
+        cantidad: cantidad,
         asignadoPor: assignedBy,
         fechaAsignacion: new Date(),
       });

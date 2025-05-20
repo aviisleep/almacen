@@ -32,6 +32,8 @@ function Navbar({ toggleSidebar }) {
         return { title: 'Gestión de Proveedores', icon: <TruckIcon className="w-6 h-6" /> };
       case '/ingreso-salida':
         return { title: 'Ingreso y Salida', icon: <ArrowRightIcon className="w-6 h-6" /> };
+        case '/cotizaciones':
+        return { title: 'Cotizaciones', icon: <ArrowRightIcon className="w-6 h-6" /> };
       default:
         return { title: 'Dashboard', icon: <HomeIcon className="w-6 h-6" /> };
     }

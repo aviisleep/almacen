@@ -5,7 +5,7 @@ const ingresoSchema = new mongoose.Schema({
     compania: { type: String, required: true },
     conductor: {
         nombre: { type: String, required: true },
-        telefono: { type: String, required: true },
+        telefono: { type: String },
         cedula: { type: String }
     },
     vehiculo: {

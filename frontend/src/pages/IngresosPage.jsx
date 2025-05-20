@@ -21,7 +21,7 @@ export const IngresosPage = () => {
       setIngresos(data);
     } catch (error) {
       toast.error('Error al cargar los ingresos');
-      console.error(error);
+      console.error('Error fetching ingresos:', error);
     } finally {
       setLoading(false);
     }
@@ -33,44 +33,37 @@ export const IngresosPage = () => {
 
   const handleCreate = async (formData) => {
     try {
-      // Preparar el FormData correctamente
-      const dataToSend = new FormData();
-      
-      // Agregar campos simples
-      dataToSend.append('compania', formData.compania);
-      dataToSend.append('observaciones', formData.observaciones || '');
-      
-      // Agregar objetos anidados como JSON
-      dataToSend.append('conductor', JSON.stringify(formData.conductor));
-      dataToSend.append('vehiculo', JSON.stringify(formData.vehiculo));
-      
-      // Agregar reparaciones
-      dataToSend.append('reparacionesSolicitadas', JSON.stringify(formData.reparacionesSolicitadas));
-      
-      // Agregar fotos (si existen)
-      if (formData.fotosEntrada && formData.fotosEntrada.length > 0) {
-        formData.fotosEntrada.forEach((file, index) => {
-          dataToSend.append('fotos', file);
-        });
+      // Verificar estructura de datos antes de enviar
+      if (!formData.compania || !formData.conductor || !formData.vehiculo) {
+        throw new Error('Faltan datos requeridos: compañía, conductor o vehículo');
       }
-      
-      // Agregar firmas (si existen)
-      if (formData.firmas.encargado) {
-        dataToSend.append('firmaEncargado', formData.firmas.encargado);
-      }
-      if (formData.firmas.conductor) {
-        dataToSend.append('firmaConductor', formData.firmas.conductor);
-      }
-      
-      console.log('Datos a enviar:', Object.fromEntries(dataToSend)); // Para debug
-      
-      await ingresosApi.create(dataToSend);
+
+      console.log('Datos verificados para crear ingreso:', {
+        compania: formData.compania,
+        conductor: formData.conductor,
+        vehiculo: formData.vehiculo,
+        hasPhotos: formData.fotosEntrada?.length > 0,
+        hasSignatures: !!formData.firmas?.encargado && !!formData.firmas?.conductor,
+        reparacionesCount: formData.reparacionesSolicitadas?.length || 0
+      });
+
+      await ingresosApi.create(formData);
       toast.success('Ingreso creado correctamente');
-      fetchIngresos();
+      await fetchIngresos();
       setIsFormOpen(false);
     } catch (error) {
-      toast.error('Error al crear el ingreso');
-      console.error('Error detallado:', error.response?.data || error.message);
+      console.error('Error al crear ingreso:', {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack
+      });
+
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Error al crear el ingreso';
+      
+      toast.error(errorMessage);
     }
   };
 
@@ -78,11 +71,11 @@ export const IngresosPage = () => {
     try {
       await ingresosApi.update(id, formData);
       toast.success('Ingreso actualizado correctamente');
-      fetchIngresos();
+      await fetchIngresos();
       setIsFormOpen(false);
     } catch (error) {
-      toast.error('Error al actualizar el ingreso');
-      console.error(error);
+      console.error('Error al actualizar ingreso:', error);
+      toast.error(error.response?.data?.message || 'Error al actualizar el ingreso');
     }
   };
 
@@ -90,11 +83,11 @@ export const IngresosPage = () => {
     try {
       await ingresosApi.delete(ingresoToDelete);
       toast.success('Ingreso eliminado correctamente');
-      fetchIngresos();
+      await fetchIngresos();
       setIsDeleteModalOpen(false);
     } catch (error) {
-      toast.error('Error al eliminar el ingreso');
-      console.error(error);
+      console.error('Error al eliminar ingreso:', error);
+      toast.error(error.response?.data?.message || 'Error al eliminar el ingreso');
     }
   };
 
@@ -105,9 +98,14 @@ export const IngresosPage = () => {
         <div className="flex space-x-2">
           <button
             onClick={() => fetchIngresos()}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            disabled={loading}
+            className={`inline-flex items-center px-3 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+              loading
+                ? 'border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
           >
-            <ArrowPathIcon className="h-4 w-4 mr-2" />
+            <ArrowPathIcon className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refrescar
           </button>
           <button
@@ -149,7 +147,6 @@ export const IngresosPage = () => {
         initialData={currentIngreso}
       />
 
-      {/* Modal de confirmación para eliminar */}
       <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirmar Eliminación">
         <div className="space-y-4">
           <p>¿Estás seguro que deseas eliminar este registro de ingreso?</p>

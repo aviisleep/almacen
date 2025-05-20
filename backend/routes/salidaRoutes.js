@@ -1,19 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const salidaController = require('../controllers/salidaController');
-const { upload } = require('../middleware/uploadMiddleware');
+const { salida, handleUploadErrors } = require('../middleware/uploadMiddleware');
 
-// Configuración para múltiples archivos
-const uploadFields = upload.fields([
-    { name: 'fotos', maxCount: 15 },
-    { name: 'firmaEncargado', maxCount: 1 },
-    { name: 'firmaConductor', maxCount: 1 }
-]);
+// Ruta para crear salida con manejo de archivos
+router.post(
+  '/',
+  salida, // Middleware de subida específico para salidas
+  handleUploadErrors,
+  salidaController.crearSalida
+);
 
-// Rutas para salidas
-router.post('/', uploadFields, salidaController.crearSalida);
+// Otras rutas
 router.get('/', salidaController.obtenerSalidas);
-router.get('/ingreso/:ingresoId', salidaController.obtenerSalidaPorIngreso);
 router.get('/:id', salidaController.obtenerSalida);
+router.put('/:id', salidaController.actualizarSalida);
+router.delete('/:id', salidaController.eliminarSalida);
 
 module.exports = router;

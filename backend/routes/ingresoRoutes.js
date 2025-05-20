@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const ingresoController = require('../controllers/ingresoController');
-const { upload } = require('../middleware/uploadMiddleware');
+const { ingreso: uploadIngresoFiles, handleUploadErrors } = require('../middleware/uploadMiddleware');
 
-// Configuración para múltiples archivos
-const uploadFields = upload.fields([
-    { name: 'fotos', maxCount: 15 },
-    { name: 'firmaEncargado', maxCount: 1 },
-    { name: 'firmaConductor', maxCount: 1 }
-]);
+console.log('uploadIngresoFiles:', uploadIngresoFiles);
+console.log('handleUploadErrors:', handleUploadErrors);
+// Ruta para crear ingreso con manejo de archivos
+router.post(
+  '/',
+  uploadIngresoFiles, // Middleware para subir archivos
+  handleUploadErrors, // Middleware para manejar errores
+  ingresoController.crearIngreso // Controlador final - ¡DEBE existir!
+);
 
 // Rutas para ingresos
-router.post('/', uploadFields, ingresoController.crearIngreso);
 router.get('/', ingresoController.obtenerIngresos);
 router.get('/:id', ingresoController.obtenerIngreso);
 router.put('/:id', ingresoController.actualizarIngreso);

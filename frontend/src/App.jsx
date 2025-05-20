@@ -10,6 +10,7 @@ import Proveedores from "./pages/ProveedorManager";
 import IngresoSalida from "./pages/IngresoSalidaForm";
 import Dashboard from "./components/Dashboard";
 import Ingresos from "./pages/IngresosPage"
+import Cotizaciones from "./pages/Cotizaciones"
 
 function App() {
   const [currentPage, setCurrentPage] = useState(""); // Estado para la página actual
@@ -33,6 +34,7 @@ function App() {
           <Route path="/proveedores" element={<Proveedores />} />
           <Route path="/ingresos" element={<Ingresos />} />
           <Route path="/ingreso-salida" element={<IngresoSalida />} />
+          <Route path="/cotizaciones" element={<Cotizaciones />} />
         </Route>
       </Routes>
 

@@ -1,8 +1,23 @@
 import React from 'react';
-import { ClockIcon, CalendarIcon, TruckIcon, UserIcon, PhoneIcon, DocumentTextIcon, CheckCircleIcon, ExclamationTriangleIcon, WrenchIcon } from '@heroicons/react/24/outline';
+import {
+  ClockIcon,
+  CalendarIcon,
+  TruckIcon,
+  UserIcon,
+  PhoneIcon,
+  DocumentTextIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  WrenchIcon,
+  TrashIcon,
+  PencilIcon,
+  CubeIcon,
+  DevicePhoneMobileIcon,
+  ShoppingBagIcon,
+  IdentificationIcon, // Importa este ícono
+} from '@heroicons/react/24/outline';
 
 export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
-  // Estado para manejar qué ítem está expandido
   const [expandedId, setExpandedId] = React.useState(null);
 
   const toggleExpand = (id) => {
@@ -32,7 +47,7 @@ export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
       {ingresos.map((ingreso) => (
         <div key={ingreso._id} className="bg-white shadow overflow-hidden rounded-lg">
           {/* Encabezado del card */}
-          <div 
+          <div
             className="px-4 py-5 sm:px-6 flex justify-between items-center cursor-pointer hover:bg-gray-50"
             onClick={() => toggleExpand(ingreso._id)}
           >
@@ -42,22 +57,26 @@ export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   {ingreso.vehiculo.placa}
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  {ingreso.compania}
-                </p>
+                <p className="mt-1 text-sm text-gray-500">{ingreso.compania}</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <span className={`px-2 py-1 text-xs rounded-full ${
-                ingreso.estado === 'completado' 
-                  ? 'bg-green-100 text-green-800' 
-                  : ingreso.estado === 'en_reparacion'
+              <span
+                className={`px-2 py-1 text-xs rounded-full ${
+                  ingreso.estado === 'completado'
+                    ? 'bg-green-100 text-green-800'
+                    : ingreso.estado === 'en_reparacion'
                     ? 'bg-yellow-100 text-yellow-800'
                     : 'bg-blue-100 text-blue-800'
-              }`}>
-                {ingreso.estado === 'completado' ? 'Completado' : 
-                 ingreso.estado === 'en_reparacion' ? 'En reparación' : 
-                 ingreso.estado === 'en_revision' ? 'En revisión' : 'Ingresado'}
+                }`}
+              >
+                {ingreso.estado === 'completado'
+                  ? 'Completado'
+                  : ingreso.estado === 'en_reparacion'
+                  ? 'En reparación'
+                  : ingreso.estado === 'en_revision'
+                  ? 'En revisión'
+                  : 'Ingresado'}
               </span>
               <div className="text-sm text-gray-500">
                 <CalendarIcon className="h-4 w-4 inline mr-1" />
@@ -124,12 +143,8 @@ export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
                           <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mr-2 mt-0.5" />
                         )}
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {reparacion.descripcion}
-                          </p>
-                          <p className="text-xs text-gray-500 capitalize">
-                            Prioridad: {reparacion.prioridad}
-                          </p>
+                          <p className="text-sm font-medium text-gray-900">{reparacion.descripcion}</p>
+                          <p className="text-xs text-gray-500 capitalize">Prioridad: {reparacion.prioridad}</p>
                         </div>
                       </div>
                     ))}
@@ -191,15 +206,26 @@ const VehicleTypeIcon = ({ type, className }) => {
     botellero: <ShoppingBagIcon className={className} />,
     camion: <CubeIcon className={className} />,
     pickup: <DevicePhoneMobileIcon className={className} />,
-    otro: <TruckIcon className={className} />
+    otro: <TruckIcon className={className} />,
   };
 
   return icons[type] || icons.otro;
 };
 
-// Iconos adicionales necesarios (añadir al import)
+// Icono personalizado
 const SnowflakeIcon = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    {...props}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+    />
   </svg>
 );

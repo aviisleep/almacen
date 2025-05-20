@@ -196,7 +196,7 @@ function EmployeeManager() {
       empleadoId: empleadoId,
       productId: productoId,  // El modelo espera productId
       productName: product.nombre, // Asegurar que el nombre del producto se envía
-      cantidad: cantidad,     // El modelo espera quantity, no cantidad
+      cantidad: cantidad,     // El modelo espera cantidad, no cantidad
       date: new Date().toISOString()
     };
 

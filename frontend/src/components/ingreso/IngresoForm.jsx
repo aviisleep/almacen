@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
+import { ingresosApi } from '../../utils/api/ingresos';
 import { FileUpload } from '../ui/FileUpload';
 import { VehicleTypeSelector } from '../ui/VehicleTypeSelector';
 import SignaturePad from './SignaturePad';
@@ -34,19 +35,96 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
     setValue('reparacionesSolicitadas', reparaciones);
   };
 
-  const submitHandler = (data) => {
-    onSubmit({
-      ...data,
-      fotosEntrada: fotos,
-      firmas: {
-        encargado: firmaEncargado,
-        conductor: firmaConductor
+
+const submitHandler = async (data) => {
+  // 1. Validar firmas primero
+  if (!firmaConductor || !firmaEncargado) {
+    alert('Debe capturar ambas firmas para continuar');
+    return;
+  }
+
+  // 2. Filtrar reparaciones vacías (excepto la primera)
+  const reparacionesFiltradas = data.reparacionesSolicitadas.filter((rep, index) => {
+    return index === 0 || rep.descripcion.trim() !== '';
+  });
+
+  // 3. Crear FormData para el envío
+  const formData = new FormData();
+
+  // 4. Agregar datos simples
+  formData.append('compania', data.compania);
+  formData.append('observaciones', data.observaciones || '');
+
+  // 5. Agregar objetos anidados como JSON
+  formData.append('conductor', JSON.stringify(data.conductor));
+  formData.append('vehiculo', JSON.stringify(data.vehiculo));
+  formData.append('reparacionesSolicitadas', JSON.stringify(reparacionesFiltradas));
+
+  // 6. Agregar fotos
+  fotos.forEach((foto) => {
+    formData.append('fotos', foto);
+  });
+
+  // 7. Función para convertir DataURL a Blob
+  const dataURLtoBlob = (dataURL) => {
+    try {
+      const arr = dataURL.split(',');
+      const mime = arr[0].match(/:(.*?);/)[1];
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
       }
-    });
+      return new Blob([u8arr], { type: mime });
+    } catch (error) {
+      console.error('Error convirtiendo firma:', error);
+      return null;
+    }
   };
 
+  // 8. Agregar firmas como archivos
+  const blobEncargado = dataURLtoBlob(firmaEncargado);
+  const blobConductor = dataURLtoBlob(firmaConductor);
+  if (blobEncargado) {
+    formData.append('firmaEncargado', blobEncargado, 'firma-encargado.png');
+  }
+  if (blobConductor) {
+    formData.append('firmaConductor', blobConductor, 'firma-conductor.png');
+  }
+
+  // 9. Configuración para el envío
+  try {
+    // Usa el método `create` de `ingresosApi`
+    const result = await ingresosApi.create(formData);
+    onSubmit(result);
+    handleClose(); // Cierra el modal después del envío exitoso
+  } catch (error) {
+    console.error('Error al enviar el formulario:', error);
+    alert(`Error al enviar: ${error.message}`);
+  }
+};
+
+// Al inicio del componente
+useEffect(() => {
+  if (initialData) {
+    setFirmaEncargado(initialData.firmas?.encargado || '');
+    setFirmaConductor(initialData.firmas?.conductor || '');
+    setFotos(initialData.fotosEntrada || []);
+  }
+}, [initialData]);
+
+const handleClose = () => {
+  setFirmaConductor('');
+  setFirmaEncargado('');
+  setFotos([]);
+  onClose();
+};
+
+
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Ingreso' : 'Nuevo Ingreso'}>
+    <Modal isOpen={isOpen} onClose={handleClose} title={initialData ? 'Editar Ingreso' : 'Nuevo Ingreso'}>
       <form onSubmit={handleSubmit(submitHandler)} className="space-y-4 overflow-y-auto max-h-[70vh]">
         {/* Datos de la compañía */}
         <div className="mb-4">
@@ -167,7 +245,7 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
                   rows={2}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   {...register(`reparacionesSolicitadas.${index}.descripcion`, { 
-                    required: 'Este campo es requerido' 
+                    required: index === 0 ? 'Este campo es requerido' : false
                   })}
                 />
                 {errors.reparacionesSolicitadas?.[index]?.descripcion && (
@@ -203,22 +281,46 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
 
         {/* Fotos del vehículo */}
         <FileUpload 
-          label="Fotos del Vehículo (Entrada)"
-          onFilesChange={setFotos}
-          multiple={true}
-        />
+  label="Fotos del Vehículo (Entrada)"
+  onFilesChange={(files) => setFotos(files)}
+  multiple={true}
+  accept="image/*"
+/>
 
-        {/* Firmas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div className="border p-4 rounded-lg">
-            <h4 className="text-lg font-medium text-gray-800 mb-3">Firma del Encargado</h4>
-            <SignaturePad onSave={setFirmaEncargado} />
-          </div>
-          <div className="border p-4 rounded-lg">
-            <h4 className="text-lg font-medium text-gray-800 mb-3">Firma del Conductor</h4>
-            <SignaturePad onSave={setFirmaConductor} />
-          </div>
-        </div>
+{/* Firmas */}
+<div className="border p-4 rounded-lg mb-4">
+  <h4 className="text-lg font-medium text-gray-800 mb-3">Firmas</h4>
+  <div className="grid md:grid-cols-2 gap-4">
+    <div>
+      <SignaturePad 
+        onSave={(signature) => {
+          setFirmaEncargado(signature);
+        }}
+        onClear={() => setFirmaEncargado('')}
+        description="Firma del encargado"
+        required={true}
+        initialValue={initialData?.firmas?.encargado || ''}
+      />
+      {!firmaEncargado && (
+        <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del encargado</p>
+      )}
+    </div>
+    <div>
+      <SignaturePad 
+        onSave={(signature) => {
+          setFirmaConductor(signature);
+        }}
+        onClear={() => setFirmaConductor('')}
+        description="Firma del conductor"
+        required={true}
+        initialValue={initialData?.firmas?.conductor || ''}
+      />
+      {!firmaConductor && (
+        <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del conductor</p>
+      )}
+    </div>
+  </div>
+</div>
 
         {/* Observaciones */}
         <div className="mb-4">
@@ -243,7 +345,7 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
             type="submit"
             className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            {initialData ? 'Actualizar' : 'Guardar'}
+            {initialData ? 'Actualizar Ingreso' : 'Registrar Ingreso'}
           </button>
         </div>
       </form>
