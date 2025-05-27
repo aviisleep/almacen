@@ -48,4 +48,8 @@ router.post('/:id/maintenance', authorize('admin', 'supervisor'), maintenanceVal
 router.put('/:id/assign', authorize('admin', 'supervisor', 'empleado'), assignToolValidation, assignTool); // Asignar herramienta
 router.put('/:id/return', authorize('admin', 'supervisor', 'empleado'), returnToolValidation, returnTool); // Devolver herramienta
 
+// Compatibilidad con POST (para frontend)
+router.post('/:id/assign', authorize('admin', 'supervisor', 'empleado'), assignToolValidation, assignTool);
+router.post('/:id/return', authorize('admin', 'supervisor', 'empleado'), returnToolValidation, returnTool);
+
 module.exports = router; 

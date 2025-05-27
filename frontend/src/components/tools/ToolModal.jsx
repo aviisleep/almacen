@@ -6,8 +6,18 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
     nombre: '',
     descripcion: '',
     precio: 0,
+    categoria: '',
+    proveedor: '',
     estado: 'stock',
-    sku: ''
+    ubicacion: '',
+    assignedTo: null,
+    ultimoMantenimiento: {
+      fecha: '',
+      descripcion: '',
+      costo: 0
+    },
+    proximoMantenimiento: '',
+    activa: true
   });
 
   const [maintenance, setMaintenance] = useState({
@@ -22,8 +32,38 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
         nombre: tool.nombre || '',
         descripcion: tool.descripcion || '',
         precio: tool.precio || 0,
+        categoria: tool.categoria || '',
+        proveedor: tool.proveedor || '',
         estado: tool.estado || 'stock',
-        sku: tool.sku || ''
+        sku: tool.sku || '',
+        ubicacion: tool.ubicacion || '',
+        assignedTo: tool.assignedTo || null,
+        ultimoMantenimiento: tool.ultimoMantenimiento || {
+          fecha: '',
+          descripcion: '',
+          costo: 0
+        },
+        proximoMantenimiento: tool.proximoMantenimiento || '',
+        activa: tool.activa !== undefined ? tool.activa : true
+      });
+    } else {
+      // Reset form when creating new tool (sin campo SKU)
+      setForm({
+        nombre: '',
+        descripcion: '',
+        precio: 0,
+        categoria: '',
+        proveedor: '',
+        estado: 'stock',
+        ubicacion: '',
+        assignedTo: null,
+        ultimoMantenimiento: {
+          fecha: '',
+          descripcion: '',
+          costo: 0
+        },
+        proximoMantenimiento: '',
+        activa: true
       });
     }
   }, [tool]);
@@ -31,21 +71,34 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await onSave(form);
-      toast.success('Herramienta actualizada correctamente');
+      const toolId = tool?._id;
+      await onSave(toolId, form);
+      toast.success(toolId ? 'Herramienta actualizada correctamente' : 'Herramienta creada correctamente');
       onClose();
     } catch (error) {
-      toast.error(error.message || 'Error al actualizar la herramienta');
+      toast.error(error.message || 'Error al guardar la herramienta');
     }
   };
 
   const handleMaintenance = async (e) => {
     e.preventDefault();
     try {
-      await onSave({
+      const updatedForm = {
         ...form,
-        mantenimiento: maintenance
-      });
+        estado: 'mantenimiento',
+        ultimoMantenimiento: {
+          fecha: new Date().toISOString().split('T')[0],
+          descripcion: maintenance.descripcion,
+          costo: maintenance.costo
+        },
+        proximoMantenimiento: maintenance.proximoMantenimiento
+      };
+      
+      setForm(updatedForm);
+      
+      const toolId = tool?._id;
+      await onSave(toolId, updatedForm);
+      
       toast.success('Mantenimiento registrado correctamente');
       setMaintenance({
         descripcion: '',
@@ -64,7 +117,9 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Detalles de la Herramienta</h2>
+            <h2 className="text-xl font-bold">
+              {tool ? 'Editar Herramienta' : 'Nueva Herramienta'}
+            </h2>
             <button
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700"
@@ -77,18 +132,21 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">SKU</label>
-                <input
-                  type="text"
-                  value={form.sku}
-                  disabled
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-50"
-                />
-              </div>
+              {/* Mostrar SKU solo en modo edición */}
+              {tool && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">SKU</label>
+                  <input
+                    type="text"
+                    value={form.sku}
+                    disabled
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-50"
+                  />
+                </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Nombre</label>
+              <div className={tool ? '' : 'md:col-span-2'}>
+                <label className="block text-sm font-medium text-gray-700">Nombre*</label>
                 <input
                   type="text"
                   value={form.nombre}
@@ -98,7 +156,7 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
                 />
               </div>
 
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">Descripción</label>
                 <textarea
                   value={form.descripcion}
@@ -109,7 +167,7 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Precio</label>
+                <label className="block text-sm font-medium text-gray-700">Precio*</label>
                 <input
                   type="number"
                   value={form.precio}
@@ -117,6 +175,28 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   min="0"
                   step="0.01"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Categoría*</label>
+                <input
+                  type="text"
+                  value={form.categoria}
+                  onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Proveedor*</label>
+                <input
+                  type="text"
+                  value={form.proveedor}
+                  onChange={(e) => setForm({ ...form, proveedor: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   required
                 />
               </div>
@@ -135,54 +215,79 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
                   <option value="reparacion_sencilla">En Reparación Sencilla</option>
                 </select>
               </div>
-            </div>
 
-            <div className="border-t pt-4 mt-4">
-              <h3 className="text-lg font-semibold mb-4">Registrar Mantenimiento</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Descripción</label>
-                  <input
-                    type="text"
-                    value={maintenance.descripcion}
-                    onChange={(e) => setMaintenance({ ...maintenance, descripcion: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Costo</label>
-                  <input
-                    type="number"
-                    value={maintenance.costo}
-                    onChange={(e) => setMaintenance({ ...maintenance, costo: Number(e.target.value) })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Próximo Mantenimiento</label>
-                  <input
-                    type="date"
-                    value={maintenance.proximoMantenimiento}
-                    onChange={(e) => setMaintenance({ ...maintenance, proximoMantenimiento: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Ubicación</label>
+                <input
+                  type="text"
+                  value={form.ubicacion}
+                  onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                />
               </div>
 
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleMaintenance}
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                >
-                  Registrar Mantenimiento
-                </button>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="activa"
+                  checked={form.activa}
+                  onChange={(e) => setForm({ ...form, activa: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="activa" className="ml-2 block text-sm text-gray-700">
+                  Herramienta activa
+                </label>
               </div>
             </div>
+
+            {tool && (
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-lg font-semibold mb-4">Registrar Mantenimiento</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Descripción</label>
+                    <input
+                      type="text"
+                      value={maintenance.descripcion}
+                      onChange={(e) => setMaintenance({ ...maintenance, descripcion: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Costo</label>
+                    <input
+                      type="number"
+                      value={maintenance.costo}
+                      onChange={(e) => setMaintenance({ ...maintenance, costo: Number(e.target.value) })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Próximo Mantenimiento</label>
+                    <input
+                      type="date"
+                      value={maintenance.proximoMantenimiento}
+                      onChange={(e) => setMaintenance({ ...maintenance, proximoMantenimiento: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={handleMaintenance}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Registrar Mantenimiento
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end space-x-4 mt-6">
               <button
@@ -196,7 +301,7 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
                 type="submit"
                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
               >
-                Guardar Cambios
+                {tool ? 'Guardar Cambios' : 'Crear Herramienta'}
               </button>
             </div>
           </form>
@@ -204,4 +309,4 @@ export default function ToolModal({ isOpen, onClose, tool, onSave }) {
       </div>
     </div>
   );
-} 
+}

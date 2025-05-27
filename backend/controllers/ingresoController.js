@@ -1,21 +1,33 @@
 const Ingreso = require('../models/ingresoVehiculoSchema');
+const Salida = require('../models/salidaVehiculoSchema');
 const { deleteUploadedFiles } = require('../middleware/uploadMiddleware');
+
+// URL base del servidor
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:5000';
 
 // Crear nuevo registro de ingreso
 exports.crearIngreso = async (req, res, next) => {
   try {
-    const fotos = req.files.fotos?.map(file => `/uploads/${file.filename}`) || [];
-    const firmaEncargado = req.files.firmaEncargado?.[0]?.filename 
-      ? `/uploads/${req.files.firmaEncargado[0].filename}` 
+    // Procesar archivos subidos
+    const fotos = req.files?.fotos?.map(file => `${SERVER_URL}/uploads/${file.filename}`) || [];
+    const firmaEncargado = req.files?.firmaEncargado?.[0]?.filename 
+      ? `${SERVER_URL}/uploads/${req.files.firmaEncargado[0].filename}` 
       : null;
-    const firmaConductor = req.files.firmaConductor?.[0]?.filename 
-      ? `/uploads/${req.files.firmaConductor[0].filename}` 
+    const firmaConductor = req.files?.firmaConductor?.[0]?.filename 
+      ? `${SERVER_URL}/uploads/${req.files.firmaConductor[0].filename}` 
       : null;
 
+    // Validar campos requeridos
     if (!req.body.compania || !req.body.conductor || !req.body.vehiculo) {
       // Eliminar archivos subidos si los datos son inválidos
-      deleteUploadedFiles([...fotos, firmaEncargado, firmaConductor]);
+      deleteUploadedFiles([...fotos, firmaEncargado, firmaConductor].filter(Boolean));
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
+
+    // Validar firmas
+    if (!firmaEncargado || !firmaConductor) {
+      deleteUploadedFiles([...fotos, firmaEncargado, firmaConductor].filter(Boolean));
+      return res.status(400).json({ error: 'Las firmas son obligatorias' });
     }
 
     const nuevoIngreso = new Ingreso({
@@ -36,11 +48,15 @@ exports.crearIngreso = async (req, res, next) => {
   } catch (error) {
     // Limpiar archivos en caso de error
     const allFiles = [
-      ...(req.files.fotos || []).map(f => `/uploads/${f.filename}`),
-      ...(req.files.firmaEncargado || []).map(f => `/uploads/${f.filename}`),
-      ...(req.files.firmaConductor || []).map(f => `/uploads/${f.filename}`)
+      ...(req.files?.fotos || []).map(f => `${SERVER_URL}/uploads/${f.filename}`),
+      ...(req.files?.firmaEncargado || []).map(f => `${SERVER_URL}/uploads/${f.filename}`),
+      ...(req.files?.firmaConductor || []).map(f => `${SERVER_URL}/uploads/${f.filename}`)
     ];
     deleteUploadedFiles(allFiles);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -52,7 +68,27 @@ exports.obtenerIngresos = async (req, res) => {
         const filter = estado ? { estado } : {};
         
         const ingresos = await Ingreso.find(filter).sort({ fechaEntrada: -1 });
-        res.json(ingresos);
+        
+        // Procesar las URLs de las imágenes para incluir la URL base
+        const ingresosConUrlsCompletas = ingresos.map(ingreso => {
+            const ingresoObj = ingreso.toObject();
+            if (ingresoObj.fotosEntrada) {
+                ingresoObj.fotosEntrada = ingresoObj.fotosEntrada.map(foto => 
+                    foto.startsWith('http') ? foto : `${SERVER_URL}${foto}`
+                );
+            }
+            if (ingresoObj.firmas) {
+                if (ingresoObj.firmas.encargado && !ingresoObj.firmas.encargado.startsWith('http')) {
+                    ingresoObj.firmas.encargado = `${SERVER_URL}${ingresoObj.firmas.encargado}`;
+                }
+                if (ingresoObj.firmas.conductor && !ingresoObj.firmas.conductor.startsWith('http')) {
+                    ingresoObj.firmas.conductor = `${SERVER_URL}${ingresoObj.firmas.conductor}`;
+                }
+            }
+            return ingresoObj;
+        });
+
+        res.json(ingresosConUrlsCompletas);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -101,25 +137,38 @@ exports.actualizarIngreso = async (req, res) => {
 // Eliminar un ingreso (solo si no tiene salida asociada)
 exports.eliminarIngreso = async (req, res) => {
   try {
+    // Verificar si existe el ingreso antes de buscar salidas asociadas
+    const ingreso = await Ingreso.findById(req.params.id);
+    if (!ingreso) {
+      return res.status(404).json({ error: 'Registro de ingreso no encontrado' });
+    }
+
+    // Verificar si tiene salida asociada
     const salidaAsociada = await Salida.findOne({ ingreso: req.params.id });
     if (salidaAsociada) {
       return res.status(400).json({ error: 'No se puede eliminar, existe una salida asociada' });
     }
 
-    const ingreso = await Ingreso.findByIdAndDelete(req.params.id);
-    if (!ingreso) {
-      return res.status(404).json({ error: 'Registro de ingreso no encontrado' });
-    }
+    // Eliminar el ingreso
+    await Ingreso.findByIdAndDelete(req.params.id);
 
+    // Eliminar archivos asociados
     const archivosAEliminar = [
       ...(ingreso.fotosEntrada || []),
       ingreso.firmas?.encargado,
       ingreso.firmas?.conductor
-    ];
-    deleteUploadedFiles(archivosAEliminar);
+    ].filter(Boolean); // Filtrar valores nulos o undefined
+
+    if (archivosAEliminar.length > 0) {
+      await deleteUploadedFiles(archivosAEliminar);
+    }
 
     res.json({ message: 'Ingreso eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error al eliminar ingreso:', error);
+    res.status(500).json({ 
+      error: 'Error al eliminar el ingreso',
+      details: error.message 
+    });
   }
 };

@@ -5,7 +5,7 @@ import { ingresosApi } from '../../utils/api/ingresos';
 import { FileUpload } from '../ui/FileUpload';
 import { VehicleTypeSelector } from '../ui/VehicleTypeSelector';
 import SignaturePad from './SignaturePad';
-import { CheckIcon, UserIcon, PhoneIcon, IdentificationIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, UserIcon, PhoneIcon, IdentificationIcon, DocumentTextIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
@@ -19,8 +19,13 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
   });
 
   const [fotos, setFotos] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [firmaEncargado, setFirmaEncargado] = useState('');
   const [firmaConductor, setFirmaConductor] = useState('');
+  const [firmasValidas, setFirmasValidas] = useState({
+    encargado: false,
+    conductor: false
+  });
 
   const handleAddReparacion = () => {
     setValue('reparacionesSolicitadas', [
@@ -35,100 +40,180 @@ export const IngresoForm = ({ isOpen, onClose, onSubmit, initialData }) => {
     setValue('reparacionesSolicitadas', reparaciones);
   };
 
+  const handleFotosChange = (newFiles) => {
+    setFotos(prevFotos => {
+      // Crear un Set con los nombres de archivos existentes
+      const existingNames = new Set(prevFotos.map(f => f.name));
+      
+      // Filtrar los nuevos archivos para evitar duplicados
+      const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
+      
+      // Crear URLs de previsualización para los nuevos archivos
+      const newPreviews = uniqueNewFiles.map(file => URL.createObjectURL(file));
+      setPreviews(prev => [...prev, ...newPreviews]);
+      
+      // Combinar las fotos existentes con las nuevas
+      return [...prevFotos, ...uniqueNewFiles];
+    });
+  };
 
-const submitHandler = async (data) => {
-  // 1. Validar firmas primero
-  if (!firmaConductor || !firmaEncargado) {
-    alert('Debe capturar ambas firmas para continuar');
-    return;
-  }
+  const handleRemoveFoto = (index) => {
+    setFotos(prevFotos => {
+      const newFotos = [...prevFotos];
+      newFotos.splice(index, 1);
+      return newFotos;
+    });
+    
+    setPreviews(prevPreviews => {
+      const newPreviews = [...prevPreviews];
+      // Revocar la URL del objeto para liberar memoria
+      URL.revokeObjectURL(newPreviews[index]);
+      newPreviews.splice(index, 1);
+      return newPreviews;
+    });
+  };
 
-  // 2. Filtrar reparaciones vacías (excepto la primera)
-  const reparacionesFiltradas = data.reparacionesSolicitadas.filter((rep, index) => {
-    return index === 0 || rep.descripcion.trim() !== '';
-  });
+  // Limpiar las URLs de objeto al desmontar el componente
+  useEffect(() => {
+    return () => {
+      previews.forEach(preview => {
+        URL.revokeObjectURL(preview);
+      });
+    };
+  }, [previews]);
 
-  // 3. Crear FormData para el envío
-  const formData = new FormData();
-
-  // 4. Agregar datos simples
-  formData.append('compania', data.compania);
-  formData.append('observaciones', data.observaciones || '');
-
-  // 5. Agregar objetos anidados como JSON
-  formData.append('conductor', JSON.stringify(data.conductor));
-  formData.append('vehiculo', JSON.stringify(data.vehiculo));
-  formData.append('reparacionesSolicitadas', JSON.stringify(reparacionesFiltradas));
-
-  // 6. Agregar fotos
-  fotos.forEach((foto) => {
-    formData.append('fotos', foto);
-  });
-
-  // 7. Función para convertir DataURL a Blob
-  const dataURLtoBlob = (dataURL) => {
-    try {
-      const arr = dataURL.split(',');
-      const mime = arr[0].match(/:(.*?);/)[1];
-      const bstr = atob(arr[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-      }
-      return new Blob([u8arr], { type: mime });
-    } catch (error) {
-      console.error('Error convirtiendo firma:', error);
-      return null;
+  const handleFirmaEncargado = (signature) => {
+    if (signature && signature.startsWith('data:image/png;base64,')) {
+      setFirmaEncargado(signature);
+      setFirmasValidas(prev => ({ ...prev, encargado: true }));
+    } else {
+      setFirmasValidas(prev => ({ ...prev, encargado: false }));
     }
   };
 
-  // 8. Agregar firmas como archivos
-  const blobEncargado = dataURLtoBlob(firmaEncargado);
-  const blobConductor = dataURLtoBlob(firmaConductor);
-  if (blobEncargado) {
-    formData.append('firmaEncargado', blobEncargado, 'firma-encargado.png');
-  }
-  if (blobConductor) {
-    formData.append('firmaConductor', blobConductor, 'firma-conductor.png');
-  }
+  const handleFirmaConductor = (signature) => {
+    if (signature && signature.startsWith('data:image/png;base64,')) {
+      setFirmaConductor(signature);
+      setFirmasValidas(prev => ({ ...prev, conductor: true }));
+    } else {
+      setFirmasValidas(prev => ({ ...prev, conductor: false }));
+    }
+  };
 
-  // 9. Configuración para el envío
-  try {
-    // Usa el método `create` de `ingresosApi`
-    const result = await ingresosApi.create(formData);
-    onSubmit(result);
-    handleClose(); // Cierra el modal después del envío exitoso
-  } catch (error) {
-    console.error('Error al enviar el formulario:', error);
-    alert(`Error al enviar: ${error.message}`);
-  }
-};
+  const handleClearFirmaEncargado = () => {
+    setFirmaEncargado('');
+    setFirmasValidas(prev => ({ ...prev, encargado: false }));
+  };
 
-// Al inicio del componente
-useEffect(() => {
-  if (initialData) {
-    setFirmaEncargado(initialData.firmas?.encargado || '');
-    setFirmaConductor(initialData.firmas?.conductor || '');
-    setFotos(initialData.fotosEntrada || []);
-  }
-}, [initialData]);
+  const handleClearFirmaConductor = () => {
+    setFirmaConductor('');
+    setFirmasValidas(prev => ({ ...prev, conductor: false }));
+  };
 
-const handleClose = () => {
-  setFirmaConductor('');
-  setFirmaEncargado('');
-  setFotos([]);
-  onClose();
-};
+  const submitHandler = async (data) => {
+    // 1. Validar campos requeridos
+    if (!data.compania || !data.conductor.nombre || !data.conductor.telefono || !data.vehiculo.placa || !data.vehiculo.tipo) {
+      alert('Por favor complete todos los campos requeridos');
+      return;
+    }
 
+    // 2. Validar firmas
+    if (!firmasValidas.encargado || !firmasValidas.conductor) {
+      alert('Debe capturar y guardar ambas firmas para continuar');
+      return;
+    }
 
+    // 3. Filtrar reparaciones vacías (excepto la primera)
+    const reparacionesFiltradas = data.reparacionesSolicitadas.filter((rep, index) => {
+      return index === 0 || rep.descripcion.trim() !== '';
+    });
+
+    // 4. Preparar datos para el envío
+    const formData = {
+      compania: data.compania,
+      conductor: {
+        nombre: data.conductor.nombre,
+        telefono: data.conductor.telefono,
+        cedula: data.conductor.cedula || ''
+      },
+      vehiculo: {
+        placa: data.vehiculo.placa,
+        tipo: data.vehiculo.tipo
+      },
+      reparacionesSolicitadas: reparacionesFiltradas,
+      observaciones: data.observaciones || '',
+      fotosEntrada: fotos,
+      firmas: {
+        encargado: firmaEncargado,
+        conductor: firmaConductor
+      }
+    };
+
+    try {
+      let result;
+      if (initialData?._id) {
+        // Modo edición
+        result = await ingresosApi.update(initialData._id, formData);
+      } else {
+        // Modo creación
+        result = await ingresosApi.create(formData);
+      }
+      onSubmit(result);
+      handleClose();
+    } catch (error) {
+      console.error('Error al enviar el formulario:', error);
+      alert(`Error al enviar: ${error.message}`);
+    }
+  };
+
+  // Al inicio del componente
+  useEffect(() => {
+    if (initialData) {
+      // Establecer valores del formulario
+      setValue('compania', initialData.compania || '');
+      setValue('conductor.nombre', initialData.conductor?.nombre || '');
+      setValue('conductor.telefono', initialData.conductor?.telefono || '');
+      setValue('conductor.cedula', initialData.conductor?.cedula || '');
+      setValue('vehiculo.placa', initialData.vehiculo?.placa || '');
+      setValue('vehiculo.tipo', initialData.vehiculo?.tipo || '');
+      setValue('observaciones', initialData.observaciones || '');
+      
+      // Establecer reparaciones
+      if (initialData.reparacionesSolicitadas?.length > 0) {
+        setValue('reparacionesSolicitadas', initialData.reparacionesSolicitadas);
+      }
+
+      // Establecer firmas
+      setFirmaEncargado(initialData.firmas?.encargado || '');
+      setFirmaConductor(initialData.firmas?.conductor || '');
+      setFirmasValidas({
+        encargado: !!initialData.firmas?.encargado,
+        conductor: !!initialData.firmas?.conductor
+      });
+
+      // Establecer fotos
+      if (initialData.fotosEntrada?.length > 0) {
+        setFotos(initialData.fotosEntrada);
+        setPreviews(initialData.fotosEntrada);
+      }
+    }
+  }, [initialData, setValue]);
+
+  const handleClose = () => {
+    setFirmaConductor('');
+    setFirmaEncargado('');
+    setFotos([]);
+    onClose();
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={initialData ? 'Editar Ingreso' : 'Nuevo Ingreso'}>
       <form onSubmit={handleSubmit(submitHandler)} className="space-y-4 overflow-y-auto max-h-[70vh]">
         {/* Datos de la compañía */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Compañía</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Compañía <span className="text-red-500">*</span>
+          </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <DocumentTextIcon className="h-5 w-5 text-gray-400" />
@@ -147,7 +232,9 @@ const handleClose = () => {
           <h4 className="text-lg font-medium text-gray-800 mb-3">Datos del Conductor</h4>
           
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Nombre</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Nombre <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <UserIcon className="h-5 w-5 text-gray-400" />
@@ -162,7 +249,9 @@ const handleClose = () => {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Teléfono <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <PhoneIcon className="h-5 w-5 text-gray-400" />
@@ -207,7 +296,9 @@ const handleClose = () => {
           />
           
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Placa</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Placa <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
@@ -279,48 +370,68 @@ const handleClose = () => {
           </button>
         </div>
 
-        {/* Fotos del vehículo */}
-        <FileUpload 
-  label="Fotos del Vehículo (Entrada)"
-  onFilesChange={(files) => setFotos(files)}
-  multiple={true}
-  accept="image/*"
-/>
+        {/* Fotos de entrada */}
+        <div className="border p-4 rounded-lg mb-4">
+          <h4 className="text-lg font-medium text-gray-800 mb-3">Fotos de Entrada</h4>
+          <FileUpload 
+            label="Subir fotos del vehículo"
+            onFilesChange={handleFotosChange}
+            multiple={true}
+          />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
+            {previews.map((preview, index) => (
+              <div key={`${fotos[index]?.name}-${index}`} className="relative">
+                <img 
+                  src={preview} 
+                  alt={`Foto ${index + 1}`}
+                  className="h-24 w-24 object-cover rounded border border-gray-200 bg-white"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2YjcyODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5FcnJvciBhbCBjYXJnYXIgaW1hZ2VuPC90ZXh0Pjwvc3ZnPg==';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveFoto(index)}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
 
-{/* Firmas */}
-<div className="border p-4 rounded-lg mb-4">
-  <h4 className="text-lg font-medium text-gray-800 mb-3">Firmas</h4>
-  <div className="grid md:grid-cols-2 gap-4">
-    <div>
-      <SignaturePad 
-        onSave={(signature) => {
-          setFirmaEncargado(signature);
-        }}
-        onClear={() => setFirmaEncargado('')}
-        description="Firma del encargado"
-        required={true}
-        initialValue={initialData?.firmas?.encargado || ''}
-      />
-      {!firmaEncargado && (
-        <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del encargado</p>
-      )}
-    </div>
-    <div>
-      <SignaturePad 
-        onSave={(signature) => {
-          setFirmaConductor(signature);
-        }}
-        onClear={() => setFirmaConductor('')}
-        description="Firma del conductor"
-        required={true}
-        initialValue={initialData?.firmas?.conductor || ''}
-      />
-      {!firmaConductor && (
-        <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del conductor</p>
-      )}
-    </div>
-  </div>
-</div>
+        {/* Firmas */}
+        <div className="border p-4 rounded-lg mb-4">
+          <h4 className="text-lg font-medium text-gray-800 mb-3">Firmas</h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <SignaturePad 
+                onSave={handleFirmaEncargado}
+                onClear={handleClearFirmaEncargado}
+                description="Firma del encargado"
+                required={true}
+                initialValue={initialData?.firmas?.encargado || ''}
+              />
+              {!firmasValidas.encargado && (
+                <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del encargado</p>
+              )}
+            </div>
+            <div>
+              <SignaturePad 
+                onSave={handleFirmaConductor}
+                onClear={handleClearFirmaConductor}
+                description="Firma del conductor"
+                required={true}
+                initialValue={initialData?.firmas?.conductor || ''}
+              />
+              {!firmasValidas.conductor && (
+                <p className="mt-2 text-sm text-red-600">Por favor guarde la firma del conductor</p>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Observaciones */}
         <div className="mb-4">

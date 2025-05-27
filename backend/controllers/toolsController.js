@@ -5,7 +5,7 @@ const { sendResponse, handleError } = require('../utils/responseHandler');
 // Obtener todas las herramientas
 const getAllTools = async (req, res) => {
   try {
-    const tools = await Tool.find({ activa: true });
+    const tools = await Tool.find({ activa: true }).populate('assignedTo', 'name email phone');
     sendResponse(res, 200, { data: tools });
   } catch (error) {
     handleError(res, error, 'Error al obtener herramientas');
@@ -15,7 +15,7 @@ const getAllTools = async (req, res) => {
 // Obtener una herramienta por ID
 const getToolById = async (req, res) => {
   try {
-    const tool = await Tool.findById(req.params.id);
+    const tool = await Tool.findById(req.params.id).populate('assignedTo', 'name email phone');
     if (!tool) {
       return sendResponse(res, 404, { message: 'Herramienta no encontrada' });
     }
@@ -28,7 +28,7 @@ const getToolById = async (req, res) => {
 // Obtener herramientas disponibles
 const getAvailableTools = async (req, res) => {
   try {
-    const tools = await Tool.find({ estado: 'stock' }).populate('assignedTo', 'name');
+    const tools = await Tool.find({ estado: 'stock' }).populate('assignedTo', 'name email phone');
     sendResponse(res, 200, { data: tools });
   } catch (error) {
     handleError(res, error, 'Error al obtener herramientas disponibles');
@@ -38,7 +38,7 @@ const getAvailableTools = async (req, res) => {
 // Obtener herramientas asignadas
 const getAssignedTools = async (req, res) => {
   try {
-    const tools = await Tool.find({ estado: 'en_uso' }).populate('assignedTo', 'name');
+    const tools = await Tool.find({ estado: 'en_uso' }).populate('assignedTo', 'name email phone');
     sendResponse(res, 200, { data: tools });
   } catch (error) {
     handleError(res, error, 'Error al obtener herramientas asignadas');
@@ -265,8 +265,8 @@ const deleteTool = async (req, res) => {
   try {
     const tool = await Tool.findByIdAndUpdate(
       req.params.id,
-      { activa: false },
-      { new: true }
+      { activa: false }, // Marca la herramienta como inactiva
+      { new: true } // Devuelve el documento actualizado
     );
     if (!tool) {
       return sendResponse(res, 404, { message: 'Herramienta no encontrada' });

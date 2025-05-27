@@ -4,8 +4,6 @@ const Employee = require('../models/Employee');
 const Product = require('../models/Product');
 const { validationResult } = require('express-validator');
 
-
-
 // Función reutilizable para responder
 const sendResponse = (res, status, data) => {
   return res.status(status).json({
@@ -26,10 +24,16 @@ const handleError = (res, error, defaultMessage = "Error interno del servidor") 
 // Obtener todos los empleados
 const getAllEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find();
-    res.status(200).json(employees);
+    const employees = await Employee.find()
+      .populate('deliveries.productId')
+      .sort({ createdAt: -1 });
+
+    return sendResponse(res, 200, {
+      message: "Empleados obtenidos exitosamente",
+      data: employees
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error al obtener empleados", employees: [] });
+    return handleError(res, error, "Error al obtener empleados");
   }
 };
 
@@ -37,7 +41,6 @@ const getAllEmployees = async (req, res) => {
 const getEmployeeById = async (req, res) => {
   try {
     const employee = await Employee.findById(req.params.id)
-      .populate('vehicles.vehicleId')
       .populate('deliveries.productId');
 
     if (!employee) {
@@ -69,27 +72,28 @@ const createEmployee = async (req, res) => {
       email, 
       phone, 
       position, 
-      Birthday,
-      vehicles,
-      deliveries
+      birthDate,
+      active
     } = req.body;
 
-    // Validación de campos obligatorios
-    if (!name || !position) {
-      return sendResponse(res, 400, { 
-        message: "Nombre y cargo son campos obligatorios" 
-      });
+    // Verificar si el email ya existe
+    if (email) {
+      const existingEmployee = await Employee.findOne({ email });
+      if (existingEmployee) {
+        return sendResponse(res, 400, {
+          message: "Ya existe un empleado con este email",
+          error: "EMAIL_DUPLICATE"
+        });
+      }
     }
 
-    // Crear nuevo empleado con todos los campos
     const newEmployee = new Employee({
       name,
-      email: email || null,
-      phone: phone || null,
+      email,
+      phone,
       position,
-      Birthday: Birthday || null,
-      vehicles: vehicles || [],
-      deliveries: deliveries || []
+      birthDate: birthDate ? new Date(birthDate) : null,
+      active: active !== undefined ? active : true
     });
 
     const savedEmployee = await newEmployee.save();
@@ -100,130 +104,139 @@ const createEmployee = async (req, res) => {
     });
 
   } catch (error) {
+    if (error.code === 11000) {
+      return sendResponse(res, 400, {
+        message: "Ya existe un empleado con este email",
+        error: "EMAIL_DUPLICATE"
+      });
+    }
     return handleError(res, error, "Error al crear el empleado");
   }
 };
 
 // Actualizar empleado
 const updateEmployee = async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
   try {
-    const { name, email, phone, position, birthDate } = req.body;
+    const { name, email, phone, position, birthDate, active } = req.body;
     
-    const updatedEmployee = await Employee.findByIdAndUpdate(
-      req.params.id,
-      { 
-        name,
-        email: email || null,
-        phone: phone || null,
-        position,
-        birthDate: birthDate || null 
-      },
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedEmployee) {
-      return res.status(404).json({ message: "Empleado no encontrado" });
+    // Verificar si el empleado existe
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      return sendResponse(res, 404, { 
+        message: "Empleado no encontrado" 
+      });
     }
 
-    res.json({
+    // Si se está actualizando el email, verificar que no exista
+    if (email && email !== employee.email) {
+      const existingEmployee = await Employee.findOne({ email });
+      if (existingEmployee) {
+        return sendResponse(res, 400, {
+          message: "Ya existe un empleado con este email",
+          error: "EMAIL_DUPLICATE"
+        });
+      }
+    }
+
+    const updateData = {
+      name,
+      email,
+      phone,
+      position,
+      birthDate: birthDate ? new Date(birthDate) : null,
+      active: active !== undefined ? active : true
+    };
+
+    const updatedEmployee = await Employee.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { 
+        new: true, 
+        runValidators: true 
+      }
+    );
+
+    return sendResponse(res, 200, {
       success: true,
       message: "Empleado actualizado correctamente",
       data: updatedEmployee
     });
 
   } catch (error) {
-    console.error("Error al actualizar empleado:", error);
-    res.status(500).json({ 
-      success: false,
-      message: "Error al actualizar empleado",
-      error: error.message 
-    });
+    console.error('Error al actualizar empleado:', error);
+    if (error.code === 11000) {
+      return sendResponse(res, 400, {
+        message: "Ya existe un empleado con este email",
+        error: "EMAIL_DUPLICATE"
+      });
+    }
+    return handleError(res, error, "Error al actualizar empleado");
   }
 };
 
-// Eliminar empleado
+// Eliminar empleado (soft delete)
 const deleteEmployee = async (req, res) => {
   try {
-    const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
-
-    if (!deletedEmployee) {
-      return sendResponse(res, 404, { message: "Empleado no encontrado" });
+    const employee = await Employee.findById(req.params.id);
+    
+    if (!employee) {
+      return sendResponse(res, 404, { 
+        message: "Empleado no encontrado" 
+      });
     }
 
+    employee.active = false;
+    await employee.save();
+
     return sendResponse(res, 200, {
-      message: "Empleado eliminado correctamente"
+      success: true,
+      message: "Empleado eliminado correctamente",
+      data: employee
     });
 
   } catch (error) {
+    console.error('Error al eliminar empleado:', error);
     return handleError(res, error, "Error al eliminar el empleado");
   }
 };
 
 // Asignar producto a empleado
 const assignProductToEmployee = async (req, res) => {
-  const errors = validationResult(req);
   try {
-    const { empleadoId, productId, productName, cantidad } = req.body;
-    if (!empleadoId || !productId || !cantidad) {
-      return sendResponse(res, 400, { message: "Faltan campos requeridos" });
-    }
-  // Validación de IDs
-    if (
-      !mongoose.Types.ObjectId.isValid(empleadoId) ||
-      !mongoose.Types.ObjectId.isValid(productId)
-    ) {
-      return sendResponse(res, 400, { message: "IDs inválidos" });
-    }
- // Obtener empleado y producto en paralelo
-    const [employee, product] = await Promise.all([
-      Employee.findById(empleadoId),
-      Product.findById(productId)
-    ]);
+    const { id } = req.params;
+    const { productId, cantidad } = req.body;
 
-    if (!employee || !product) {
-      return sendResponse(res, 404, {
-        message: !employee ? "Empleado no encontrado" : "Producto no encontrado"
-      });
+    const employee = await Employee.findById(id);
+    if (!employee) {
+      return sendResponse(res, 404, { message: "Empleado no encontrado" });
     }
 
-    if (product.cantidad < cantidad) {
-      return sendResponse(res, 400, { message: `No hay suficiente stock. Disponible: ${product.cantidad}` });
+    const product = await Product.findById(productId);
+    if (!product) {
+      return sendResponse(res, 404, { message: "Producto no encontrado" });
     }
 
-    // Reducir stock del producto
-    product.cantidad -= cantidad;
-    product.historial.push({
-      accion: "Entrega a empleado",
-      detalles: `Entregado a ${employee.name} (${cantidad} unidades).`,
-      fecha: new Date()
-    });
+    if (product.stock < cantidad) {
+      return sendResponse(res, 400, { message: "No hay suficiente stock disponible" });
+    }
+
+    // Actualizar el stock del producto
+    product.stock -= cantidad;
     await product.save();
 
-    // Registrar entrega en el empleado
-    employee.deliveries.push({
-      productId: product._id,
-      productName: productName || product.nombre,
-      cantidad: cantidad,
-      date: new Date()
-    });
-    await Promise.all([product.save(), employee.save()]);
+    // Usar el método del modelo para entregar el producto
+    await employee.deliverProduct(productId, cantidad);
 
     return sendResponse(res, 200, {
-      message: "Producto asignado correctamente",
-      data: { 
-        employee: employee.name,
-        product: product.nombre,
-        cantidad: cantidad 
+      message: "Producto entregado correctamente",
+      data: {
+        employee,
+        product
       }
     });
 
   } catch (error) {
-    return handleError(res, error, "Error al asignar producto");
+    return handleError(res, error, "Error al entregar producto al empleado");
   }
 };
 

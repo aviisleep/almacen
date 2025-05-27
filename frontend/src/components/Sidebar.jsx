@@ -9,6 +9,7 @@ import {
   TruckIcon,
   CubeTransparentIcon,
   UserIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/solid';
 
 const menuItems = [
@@ -16,11 +17,11 @@ const menuItems = [
   { path: '/proveedores', label: 'Proveedores', icon: UserGroupIcon },
   { path: '/inventario', label: 'Inventario', icon: ListBulletIcon },
   { path: '/bays', label: 'Bahías', icon: CubeTransparentIcon },
-  { path: '/vehicles', label: 'Vehículos', icon: TruckIcon },
-  { path: '/ingreso-salida', label: 'Entrada - Salida', icon: UserIcon },
-  { path: '/employees', label: 'Empleados', icon: UserIcon },
+  { path: '/vehiculos', label: 'Vehículos', icon: TruckIcon },
+  { path: '/empleados', label: 'Empleados', icon: UserIcon },
   { path: '/ingresos', label: 'Entrada', icon: UserIcon },
   { path: '/cotizaciones', label: 'Cotizaciones', icon: PlusCircleIcon },
+  { path: '/herramientas', label: 'Herramientas', icon: WrenchScrewdriverIcon },
 ];
 
 function Sidebar({ isOpen }) {

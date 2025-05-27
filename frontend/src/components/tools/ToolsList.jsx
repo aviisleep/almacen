@@ -2,21 +2,44 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTools } from '../../contexts/ToolsContext';
 import { formatCurrency } from '../../utils/format';
-import { FaEdit, FaTrash, FaUser, FaHistory } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaUser, FaHistory, FaTools } from 'react-icons/fa';
 import ToolModal from './ToolModal';
 import { toast } from 'react-toastify';
 
 export const ToolsList = () => {
-  const { tools, employees, loading, error, assignTool, returnTool, deleteTool, updateTool, loadTools } = useTools();
+  const { 
+    tools, 
+    loading: contextLoading, 
+    error: contextError, 
+    loadTools,
+    deleteTool,
+    assignTool,
+    returnTool,
+    updateTool,
+    employees
+  } = useTools();
   const navigate = useNavigate();
-  const [selectedTool, setSelectedTool] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [selectedTool, setSelectedTool] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [observaciones, setObservaciones] = useState('');
-  const [returnEstado, setReturnEstado] = useState('disponible');
+  const [returnEstado, setReturnEstado] = useState('stock');
+  const [localLoading, setLocalLoading] = useState(false);
+
+  // Función para traducir estados
+  const translateStatus = (status) => {
+    const statusMap = {
+      'stock': 'En Stock',
+      'en_uso': 'En Uso',
+      'dañada': 'Dañada',
+      'mantenimiento': 'En Mantenimiento',
+      'reparacion_sencilla': 'En Reparación Sencilla'
+    };
+    return statusMap[status] || status;
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -40,13 +63,12 @@ export const ToolsList = () => {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = async (toolData) => {
+  const handleSaveEdit = async (toolId, updatedData) => {
     try {
-      await updateTool(selectedTool._id, toolData);
-      setShowEditModal(false);
-      setSelectedTool(null);
+      await updateTool(toolId, updatedData);
       toast.success('Herramienta actualizada correctamente');
-      await loadTools(true); // Recargar la lista de herramientas
+      await loadTools(true);
+      setShowEditModal(false);
     } catch (error) {
       console.error('Error al actualizar la herramienta:', error);
       toast.error(error.message || 'Error al actualizar la herramienta');
@@ -54,59 +76,69 @@ export const ToolsList = () => {
   };
 
   const handleDelete = async (toolId) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar esta herramienta? Esta acción no se puede deshacer.')) {
+    if (window.confirm('¿Estás seguro de que deseas eliminar esta herramienta?')) {
       try {
+        setLocalLoading(true);
         await deleteTool(toolId);
         toast.success('Herramienta eliminada correctamente');
         await loadTools(true);
       } catch (error) {
         console.error('Error al eliminar la herramienta:', error);
         toast.error(error.message || 'Error al eliminar la herramienta');
+      } finally {
+        setLocalLoading(false);
       }
     }
   };
 
-  const handleAssign = async (toolId) => {
-    setSelectedTool(toolId);
+  const handleAssign = (tool) => {
+    setSelectedTool(tool);
     setShowAssignModal(true);
   };
 
   const handleSaveAssign = async () => {
+    if (!selectedEmployee) {
+      toast.error('Debes seleccionar un empleado');
+      return;
+    }
+
     try {
-      await assignTool(selectedTool, selectedEmployee, observaciones);
+      await assignTool(selectedTool._id, selectedEmployee, observaciones);
+      toast.success('Herramienta asignada correctamente');
       setShowAssignModal(false);
-      setSelectedTool(null);
       setSelectedEmployee('');
       setObservaciones('');
-      toast.success('Herramienta asignada correctamente');
-      await loadTools(true); // Recargar la lista de herramientas
+      await loadTools(true);
     } catch (error) {
       console.error('Error al asignar la herramienta:', error);
       toast.error(error.message || 'Error al asignar la herramienta');
     }
   };
 
-  const handleReturn = async (toolId) => {
-    setSelectedTool(toolId);
+  const handleReturn = (tool) => {
+    setSelectedTool(tool);
     setShowReturnModal(true);
   };
 
   const handleSaveReturn = async () => {
     try {
-      await returnTool(selectedTool, returnEstado, observaciones);
-      setShowReturnModal(false);
-      setSelectedTool(null);
-      setReturnEstado('disponible');
-      setObservaciones('');
+      await returnTool(selectedTool._id, returnEstado, observaciones);
       toast.success('Herramienta devuelta correctamente');
-      await loadTools(true); // Recargar la lista de herramientas
+      setShowReturnModal(false);
+      setReturnEstado('stock');
+      setObservaciones('');
+      await loadTools(true);
     } catch (error) {
       console.error('Error al devolver la herramienta:', error);
       toast.error(error.message || 'Error al devolver la herramienta');
     }
   };
 
-  if (loading) {
+  const getEmployeeName = (employee) => {
+    return employee?.name || 'Empleado no disponible';
+  };
+
+  if (contextLoading || localLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -114,10 +146,10 @@ export const ToolsList = () => {
     );
   }
 
-  if (error) {
+  if (contextError) {
     return (
       <div className="text-center py-8">
-        <p className="text-red-500">Error al cargar las herramientas: {error.message}</p>
+        <p className="text-red-500">Error al cargar las herramientas: {contextError.message}</p>
       </div>
     );
   }
@@ -125,10 +157,13 @@ export const ToolsList = () => {
   if (!tools || tools.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-500">No hay herramientas disponibles</p>
+        <div className="flex justify-center mb-4">
+          <FaTools className="text-gray-400 text-4xl" />
+        </div>
+        <p className="text-gray-500 mb-4">No hay herramientas registradas</p>
         <button
           onClick={() => navigate('/herramientas/nueva')}
-          className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
         >
           Agregar Nueva Herramienta
         </button>
@@ -137,94 +172,119 @@ export const ToolsList = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Herramientas</h2>
-        <div className="space-x-2">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 className="text-2xl font-bold text-gray-800">Gestión de Herramientas</h2>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => navigate('/herramientas/nueva')}
-            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors"
           >
-            Nueva Herramienta
+            <FaTools /> Nueva Herramienta
           </button>
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            className={`flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+              showHistory ? 'bg-blue-700 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
           >
-            {showHistory ? 'Ocultar Historial' : 'Mostrar Historial'}
+            <FaHistory /> {showHistory ? 'Ocultar Historial' : 'Mostrar Historial'}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {tools.map((tool) => (
-          <div key={tool._id} className="bg-white p-4 rounded-lg shadow">
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="font-bold">{tool.nombre}</h3>
-                <p className="text-sm text-gray-600">SKU: {tool.sku}</p>
-                <p className="text-sm">Precio: {formatCurrency(tool.precio)}</p>
-                <span className={`inline-block px-2 py-1 rounded text-sm ${getStatusColor(tool.estado)}`}>
-                  {tool.estado}
-                </span>
+          <div key={tool._id} className="bg-white p-4 rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1">
+                <div className="flex items-start justify-between">
+                  <h3 className="font-bold text-lg text-gray-800">{tool.nombre}</h3>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(tool.estado)}`}>
+                    {translateStatus(tool.estado)}
+                  </span>
+                </div>
+                
+                <div className="mt-2 space-y-1 text-sm">
+                  <p><span className="font-medium">SKU:</span> {tool.sku}</p>
+                  <p><span className="font-medium">Precio:</span> {formatCurrency(tool.precio)}</p>
+                  <p><span className="font-medium">Categoría:</span> {tool.categoria}</p>
+                  <p><span className="font-medium">Proveedor:</span> {tool.proveedor}</p>
+                  {tool.ubicacion && (
+                    <p><span className="font-medium">Ubicación:</span> {tool.ubicacion}</p>
+                  )}
+                </div>
               </div>
-              <div className="flex space-x-2">
+
+              <div className="flex flex-col items-center gap-2">
                 <button
                   onClick={() => handleEdit(tool)}
-                  className="text-yellow-500 hover:text-yellow-700"
+                  className="text-yellow-600 hover:text-yellow-800 p-1"
                   title="Editar"
                 >
-                  <FaEdit />
+                  <FaEdit size={16} />
                 </button>
-                {tool.estado === 'stock' && (
+                
+                {tool.estado === 'stock' ? (
                   <button
-                    onClick={() => handleAssign(tool._id)}
-                    className="text-blue-500 hover:text-blue-700"
+                    onClick={() => handleAssign(tool)}
+                    className="text-blue-600 hover:text-blue-800 p-1"
                     title="Asignar"
                   >
-                    <FaUser />
+                    <FaUser size={16} />
                   </button>
-                )}
-                {tool.estado === 'en_uso' && (
+                ) : tool.estado === 'en_uso' && (
                   <button
-                    onClick={() => handleReturn(tool._id)}
-                    className="text-green-500 hover:text-green-700"
+                    onClick={() => handleReturn(tool)}
+                    className="text-green-600 hover:text-green-800 p-1"
                     title="Devolver"
                   >
-                    <FaEdit />
+                    <FaHistory size={16} />
                   </button>
                 )}
+                
                 <button
                   onClick={() => handleDelete(tool._id)}
-                  className="text-red-500 hover:text-red-700"
+                  className="text-red-600 hover:text-red-800 p-1"
                   title="Eliminar"
                 >
-                  <FaTrash />
+                  <FaTrash size={16} />
                 </button>
               </div>
             </div>
 
-            {tool.empleadoAsignado && (
-              <div className="mt-2 text-sm">
-                <p className="font-semibold">Asignado a:</p>
-                <p>{tool.empleadoAsignado.nombre}</p>
-                <p className="text-gray-600">
-                  Desde: {new Date(tool.fechaAsignacion).toLocaleDateString()}
-                </p>
+            {tool.assignedTo && (
+              <div className="mt-3 p-2 bg-gray-50 rounded text-sm">
+                <p className="font-medium">Asignada a:</p>
+                <p>{getEmployeeName(tool.assignedTo)}</p>
+                {tool.historial && tool.historial.length > 0 && (
+                  <p className="text-gray-500 text-xs">
+                    Desde: {new Date(tool.historial[tool.historial.length - 1].fecha).toLocaleDateString()}
+                  </p>
+                )}
               </div>
             )}
 
             {showHistory && tool.historial && tool.historial.length > 0 && (
-              <div className="mt-4">
-                <h4 className="font-semibold mb-2">Historial</h4>
-                <div className="space-y-2">
-                  {tool.historial.map((entry, index) => (
-                    <div key={index} className="text-sm border-l-2 border-gray-200 pl-2">
-                      <p className="font-medium">{entry.accion}</p>
-                      <p>Empleado: {entry.empleado?.nombre || 'N/A'}</p>
-                      <p>Fecha: {new Date(entry.fecha).toLocaleDateString()}</p>
+              <div className="mt-3 border-t pt-3">
+                <h4 className="font-semibold text-sm mb-2">Historial reciente</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {tool.historial.slice().reverse().slice(0, 3).map((entry, index) => (
+                    <div key={index} className="text-xs border-l-2 border-gray-300 pl-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium capitalize">{entry.accion}</span>
+                        <span className="text-gray-500">
+                          {new Date(entry.fecha).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {entry.employeeName && (
+                        <p>Empleado: {entry.employeeName}</p>
+                      )}
                       {entry.observaciones && (
-                        <p className="text-gray-600">Obs: {entry.observaciones}</p>
+                        <p className="text-gray-600 truncate">Obs: {entry.observaciones}</p>
+                      )}
+                      {entry.costo && (
+                        <p className="text-gray-600">Costo: {formatCurrency(entry.costo)}</p>
                       )}
                     </div>
                   ))}
@@ -250,50 +310,41 @@ export const ToolsList = () => {
 
       {/* Modal de Asignación */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Asignar Herramienta</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Empleado</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Empleado *</label>
                 <select
                   value={selectedEmployee}
                   onChange={(e) => setSelectedEmployee(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
                   <option value="">Seleccionar empleado</option>
-                  {employees && employees.length > 0 ? (
-                    employees.map((employee) => (
-                      <option key={employee._id} value={employee._id}>
-                        {employee.name} {employee.position ? `- ${employee.position}` : ''}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="" disabled>No hay empleados disponibles</option>
-                  )}
+                  {employees?.map((employee) => (
+                    <option key={employee._id} value={employee._id}>
+                      {employee.name} {employee.position ? `(${employee.position})` : ''}
+                    </option>
+                  ))}
                 </select>
-                {!selectedEmployee && (
-                  <p className="mt-1 text-sm text-red-600">Debes seleccionar un empleado</p>
-                )}
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700">Observaciones</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
                 <textarea
                   value={observaciones}
                   onChange={(e) => setObservaciones(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   rows="3"
+                  placeholder="Detalles de la asignación..."
                 />
               </div>
-              <div className="flex justify-end space-x-2">
+              
+              <div className="flex justify-end gap-2 pt-2">
                 <button
-                  onClick={() => {
-                    setShowAssignModal(false);
-                    setSelectedTool(null);
-                    setSelectedEmployee('');
-                    setObservaciones('');
-                  }}
+                  onClick={() => setShowAssignModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
                 >
                   Cancelar
@@ -301,9 +352,9 @@ export const ToolsList = () => {
                 <button
                   onClick={handleSaveAssign}
                   disabled={!selectedEmployee}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Asignar
+                  Confirmar Asignación
                 </button>
               </div>
             </div>
@@ -313,39 +364,38 @@ export const ToolsList = () => {
 
       {/* Modal de Devolución */}
       {showReturnModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-96">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">Devolver Herramienta</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Estado</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado al devolver *</label>
                 <select
                   value={returnEstado}
                   onChange={(e) => setReturnEstado(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="disponible">Disponible</option>
+                  <option value="stock">En Stock</option>
                   <option value="mantenimiento">En Mantenimiento</option>
                   <option value="dañada">Dañada</option>
+                  <option value="reparacion_sencilla">En Reparación Sencilla</option>
                 </select>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700">Observaciones</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
                 <textarea
                   value={observaciones}
                   onChange={(e) => setObservaciones(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   rows="3"
+                  placeholder="Detalles de la devolución..."
                 />
               </div>
-              <div className="flex justify-end space-x-2">
+              
+              <div className="flex justify-end gap-2 pt-2">
                 <button
-                  onClick={() => {
-                    setShowReturnModal(false);
-                    setSelectedTool(null);
-                    setReturnEstado('disponible');
-                    setObservaciones('');
-                  }}
+                  onClick={() => setShowReturnModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
                 >
                   Cancelar
@@ -354,7 +404,7 @@ export const ToolsList = () => {
                   onClick={handleSaveReturn}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
                 >
-                  Devolver
+                  Confirmar Devolución
                 </button>
               </div>
             </div>
@@ -363,4 +413,4 @@ export const ToolsList = () => {
       )}
     </div>
   );
-}; 
+};

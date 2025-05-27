@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import api from '../utils/api/api';
 
 function VehicleManager() {
   const [vehicles, setVehicles] = useState([]);
@@ -17,14 +18,8 @@ function VehicleManager() {
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/vehiculos");
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error desconocido");
-      }
-      const data = await response.json();
-      console.log(data);
-      setVehicles(data);
+      const response = await api.get("/vehiculos");
+      setVehicles(response.data);
     } catch (error) {
       console.error("Error al cargar los vehículos:", error.message);
     }
@@ -36,7 +31,6 @@ function VehicleManager() {
     setNewVehicle((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Crear un nuevo vehículo
   // Crear o editar un vehículo
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,39 +40,21 @@ function VehicleManager() {
       return;
     }
     try {
-      const method = newVehicle._id ? "PUT" : "POST";
-      const url = newVehicle._id
-        ? `http://localhost:5000/api/vehiculos/${newVehicle._id}`
-        : "http://localhost:5000/api/vehiculos";
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newVehicle),
+      const method = newVehicle._id ? "put" : "post";
+      const url = newVehicle._id ? `/vehiculos/${newVehicle._id}` : "/vehiculos";
+      
+      const response = await api[method](url, newVehicle);
+      await fetchVehicles(); // Recargar la lista después de crear/editar
+      setIsCreateModalOpen(false);
+      setNewVehicle({
+        placa: "",
+        compañia: "",
+        tipoVehiculo: "Trailer",
+        estado: "cotizacion",
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al guardar el vehículo");
-      }
-       if (!newVehicle.tipoVehiculo) {
-    alert("Por favor selecciona un tipo de vehículo.");
-    return;
-  }
-
-      const data = await response.json();
-      if (newVehicle._id) {
-        setVehicles((prev) =>
-          prev.map((v) => (v._id === data._id ? data : v))
-        );
-      } else {
-        setVehicles([...vehicles, data]);
-      }
-
-      resetForm();
-      alert("Vehículo guardado correctamente.");
     } catch (error) {
-      alert(`Error al guardar el vehículo: ${error.message}`);
+      console.error("Error al guardar el vehículo:", error.message);
+      alert("Error al guardar el vehículo. Por favor, intenta nuevamente.");
     }
   };
 
@@ -92,23 +68,12 @@ const handleEdit = (vehicle) => {
   const handleDelete = async (id) => {
     if (!window.confirm("¿Estás seguro de eliminar este vehículo?")) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/vehiculos/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al eliminar el vehículo");
-      }
-      setVehicles(vehicles.filter((v) => v._id !== id));
+      const response = await api.delete(`/vehiculos/${id}`);
+      await fetchVehicles();
       alert("Vehículo eliminado correctamente.");
     } catch (error) {
       alert(`Error al eliminar el vehículo: ${error.message}`);
     }
-  };
-
-  const resetForm = () => {
-    setNewVehicle({ placa: "", compañia: "", tipoVehiculo: "", estado: "cotizacion" });
-    setIsCreateModalOpen(false);
   };
 
   return (

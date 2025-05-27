@@ -11,28 +11,81 @@ export const SignaturePad = ({
 }) => {
   const sigCanvas = useRef(null);
   const [isSigned, setIsSigned] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (initialValue && sigCanvas.current && !sigCanvas.current.isEmpty()) {
-      sigCanvas.current.fromDataURL(initialValue);
-      setIsSigned(true);
+    if (initialValue && sigCanvas.current) {
+      try {
+        // Verificar que el valor inicial sea un DataURL válido
+        if (typeof initialValue === 'string' && initialValue.startsWith('data:')) {
+          sigCanvas.current.fromDataURL(initialValue);
+          setIsSigned(true);
+          setError(null);
+        } else {
+          console.warn('Valor inicial de firma inválido');
+          setError('Error al cargar la firma inicial');
+        }
+      } catch (err) {
+        console.error('Error al cargar firma inicial:', err);
+        setError('Error al cargar la firma inicial');
+      }
     }
   }, [initialValue]);
 
   const clear = () => {
-    sigCanvas.current.clear();
-    setIsSigned(false);
-    if (onClear) onClear();
+    if (sigCanvas.current) {
+      sigCanvas.current.clear();
+      setIsSigned(false);
+      setError(null);
+      if (onClear) onClear();
+    }
   };
 
   const save = () => {
-  if (!sigCanvas.current.isEmpty()) {
-    const canvas = sigCanvas.current.getCanvas(); // Usa getCanvas() en lugar de getTrimmedCanvas()
-    const signature = canvas.toDataURL('image/png');
-    onSave(signature);
-    setIsSigned(true);
-  }
-};
+    if (!sigCanvas.current) {
+      setError('Error: No se pudo acceder al canvas de firma');
+      return;
+    }
+
+    if (sigCanvas.current.isEmpty()) {
+      setError('Por favor, firme antes de guardar');
+      return;
+    }
+
+    try {
+      // Obtener el canvas y asegurarse de que tenga un fondo blanco
+      const canvas = sigCanvas.current.getCanvas();
+      const context = canvas.getContext('2d');
+      
+      // Crear un canvas temporal para la firma con fondo blanco
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempContext = tempCanvas.getContext('2d');
+      
+      // Establecer fondo blanco en el canvas temporal
+      tempContext.fillStyle = 'white';
+      tempContext.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Copiar la firma al canvas temporal
+      tempContext.drawImage(canvas, 0, 0);
+
+      // Generar el DataURL con calidad máxima desde el canvas temporal
+      const signature = tempCanvas.toDataURL('image/png', 1.0);
+      
+      // Validar que el DataURL sea válido
+      if (!signature || !signature.startsWith('data:image/png;base64,')) {
+        throw new Error('Error al generar la firma');
+      }
+
+      onSave(signature);
+      setIsSigned(true);
+      setError(null);
+    } catch (err) {
+      console.error('Error al guardar firma:', err);
+      setError('Error al guardar la firma');
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -51,8 +104,13 @@ export const SignaturePad = ({
           }}
           penColor="black"
           backgroundColor="rgb(255, 255, 255)"
+          clearOnResize={false}
         />
       </div>
+      
+      {error && (
+        <p className="text-sm text-red-600">{error}</p>
+      )}
       
       <div className="flex justify-between gap-2">
         <button

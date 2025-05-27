@@ -64,9 +64,9 @@ router.delete(
 
 // Entregar producto a un empleado
 router.post(
-  "/deliver-product",
+  "/:id/deliver-product",
   [
-    body("empleadoId").isMongoId().withMessage("ID de empleado inválido"),
+    param("id").isMongoId().withMessage("ID de empleado inválido"),
     body("productId").isMongoId().withMessage("ID de producto inválido"),
     body("cantidad").isInt({ min: 1 }).withMessage("Cantidad debe ser mayor a 0")
   ],

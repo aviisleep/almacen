@@ -23,16 +23,16 @@ function Navbar({ toggleSidebar }) {
       case '/inventario':
         return { title: 'Inventario', icon: <CubeIcon className="w-6 h-6" /> };
       case '/bays':
-        return { title: 'Bays', icon: <TruckIcon className="w-6 h-6" /> };
-      case '/vehicles':
+        return { title: 'Bahías', icon: <TruckIcon className="w-6 h-6" /> };
+      case '/vehiculos':
         return { title: 'Gestión de Vehículos', icon: <TruckIcon className="w-6 h-6" /> };
-      case '/employees':
+      case '/empleados':
         return { title: 'Gestión de Empleados', icon: <UsersIcon className="w-6 h-6" /> };
       case '/proveedores':
         return { title: 'Gestión de Proveedores', icon: <TruckIcon className="w-6 h-6" /> };
-      case '/ingreso-salida':
-        return { title: 'Ingreso y Salida', icon: <ArrowRightIcon className="w-6 h-6" /> };
-        case '/cotizaciones':
+      case '/ingresos':
+        return { title: 'Ingresos', icon: <ArrowRightIcon className="w-6 h-6" /> };
+      case '/cotizaciones':
         return { title: 'Cotizaciones', icon: <ArrowRightIcon className="w-6 h-6" /> };
       default:
         return { title: 'Dashboard', icon: <HomeIcon className="w-6 h-6" /> };

@@ -18,10 +18,12 @@ export const ToolReturnForm = ({ onSuccess }) => {
         console.log('Iniciando carga de herramientas asignadas...');
         const response = await toolsApi.getAssigned();
         console.log('Respuesta de herramientas asignadas:', response);
-        
+
         if (response?.data && Array.isArray(response.data)) {
+          console.log('Estructura de herramientas asignadas:', JSON.stringify(response.data, null, 2));
           setAssignedTools(response.data);
         } else if (Array.isArray(response)) {
+          console.log('Estructura de herramientas asignadas:', JSON.stringify(response, null, 2));
           setAssignedTools(response);
         } else {
           console.error('Formato de respuesta inesperado:', response);
@@ -38,12 +40,25 @@ export const ToolReturnForm = ({ onSuccess }) => {
 
   // Función para obtener el nombre del empleado
   const getEmployeeName = (employeeId) => {
+    console.log('getEmployeeName recibió:', { employeeId, tipo: typeof employeeId });
+    
     if (!employeeId || !Array.isArray(employees)) {
+      console.log('No hay employeeId o employees:', { employeeId, employees });
       return 'N/A';
     }
 
-    const id = typeof employeeId === 'object' ? employeeId._id : employeeId;
-    const employee = employees.find(emp => emp?._id === id);
+    // Asegurarnos de que employeeId sea un string
+    const id = employeeId?.toString();
+    console.log('ID a buscar:', id);
+
+    const employee = employees.find(emp => {
+      const empId = emp?._id?.toString();
+      const match = empId === id;
+      console.log('Comparando:', { empId, id, match });
+      return match;
+    });
+
+    console.log('Empleado encontrado:', employee);
     return employee?.name || 'N/A';
   };
 
@@ -114,11 +129,11 @@ export const ToolReturnForm = ({ onSuccess }) => {
               {assignedTools.map((tool) => {
                 if (!tool) return null;
                 
-                const empleadoAsignado = tool.empleadoAsignado;
+                const empleadoAsignado = tool.assignedTo;
                 
                 return (
                   <option key={tool._id} value={tool._id}>
-                    {tool.nombre} - {tool.SKU} (Asignada a: {getEmployeeName(empleadoAsignado)})
+                    {tool.nombre} - {tool.sku} (Asignada a: {empleadoAsignado?.name || 'Empleado no disponible'})
                   </option>
                 );
               })}

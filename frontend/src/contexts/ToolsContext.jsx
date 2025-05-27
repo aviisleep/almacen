@@ -25,32 +25,32 @@ export const ToolsProvider = ({ children }) => {
 
   // Función para verificar si los datos necesitan actualización
   const needsRefresh = useCallback((type) => {
-    if (!lastFetch[type]) return true;
-    return Date.now() - lastFetch[type] > CACHE_DURATION;
-  }, [lastFetch]);
+  if (!lastFetch[type]) return true;
+  return Date.now() - lastFetch[type] > CACHE_DURATION;
+}, [lastFetch]);
 
   // Cargar herramientas solo si es necesario
   const loadTools = useCallback(async (force = false) => {
-    if (!force && !needsRefresh('tools')) {
-      return tools;
-    }
+  if (!force && !needsRefresh('tools')) {
+    return tools;
+  }
 
-    try {
-      setLoading(true);
-      const data = await toolsApi.getAll();
-      setTools(data);
-      setLastFetch(prev => ({ ...prev, tools: Date.now() }));
-      return data;
-    } catch (err) {
-      setError({
-        message: 'Error al cargar herramientas',
-        details: err.message
-      });
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [needsRefresh, tools]);
+  try {
+    setLoading(true);
+    const data = await toolsApi.getAll();
+    setTools(data);
+    setLastFetch(prev => ({ ...prev, tools: Date.now() }));
+    return data;
+  } catch (err) {
+    setError({
+      message: 'Error al cargar herramientas',
+      details: err.message
+    });
+    return [];
+  } finally {
+    setLoading(false);
+  }
+}, [needsRefresh, tools]);
 
   // Cargar empleados solo si es necesario
   const loadEmployees = useCallback(async (force = false) => {
@@ -61,9 +61,11 @@ export const ToolsProvider = ({ children }) => {
     try {
       setLoading(true);
       const data = await employeesApi.getAll();
-      setEmployees(data);
+      // Filtrar solo los empleados activos
+      const activeEmployees = data.filter(employee => employee.active);
+      setEmployees(activeEmployees);
       setLastFetch(prev => ({ ...prev, employees: Date.now() }));
-      return data;
+      return activeEmployees;
     } catch (err) {
       setError({
         message: 'Error al cargar empleados',
@@ -73,30 +75,30 @@ export const ToolsProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [needsRefresh, employees]);
+  }, [needsRefresh]);
 
   // Cargar datos iniciales
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        await Promise.all([
-          loadTools(true),
-          loadEmployees(true)
-        ]);
-      } catch (err) {
-        console.error('Error al inicializar datos:', err);
-      }
-    };
+useEffect(() => {
+  const initializeData = async () => {
+    try {
+      await Promise.all([
+        loadTools(true),
+        loadEmployees(true)
+      ]);
+    } catch (err) {
+      console.error('Error al inicializar datos:', err);
+    }
+  };
 
-    initializeData();
-  }, []);
+  initializeData();
+}, []);
 
   // Asignar herramienta
   const assignTool = async (toolId, employeeId, observaciones = '') => {
     try {
       setLoading(true);
       const updatedTool = await toolsApi.assign(toolId, employeeId, observaciones);
-      setTools(prevTools => 
+      setTools(prevTools =>
         prevTools.map(tool => tool._id === toolId ? updatedTool : tool)
       );
       return updatedTool;
@@ -116,7 +118,7 @@ export const ToolsProvider = ({ children }) => {
     try {
       setLoading(true);
       const updatedTool = await toolsApi.return(toolId, estado, observaciones);
-      setTools(prevTools => 
+      setTools(prevTools =>
         prevTools.map(tool => tool._id === toolId ? updatedTool : tool)
       );
       return updatedTool;
@@ -154,7 +156,7 @@ export const ToolsProvider = ({ children }) => {
     try {
       setLoading(true);
       const updatedTool = await toolsApi.update(toolId, toolData);
-      setTools(prevTools => 
+      setTools(prevTools =>
         prevTools.map(tool => tool._id === toolId ? updatedTool : tool)
       );
       return updatedTool;
@@ -173,9 +175,15 @@ export const ToolsProvider = ({ children }) => {
   const deleteTool = async (toolId) => {
     try {
       setLoading(true);
-      await toolsApi.delete(toolId);
-      setTools(prevTools => prevTools.filter(tool => tool._id !== toolId));
-      await loadTools(true);
+      const response = await toolsApi.delete(toolId);
+
+      if (response?.success) {
+        // Actualizar la lista de herramientas localmente
+        setTools(prevTools => prevTools.filter(tool => tool._id !== toolId));
+        return response;
+      } else {
+        throw new Error(response?.message || "Error al eliminar la herramienta");
+      }
     } catch (err) {
       setError({
         message: 'Error al eliminar herramienta',
@@ -208,4 +216,4 @@ export const ToolsProvider = ({ children }) => {
   );
 };
 
-export default ToolsContext; 
+export default ToolsContext;

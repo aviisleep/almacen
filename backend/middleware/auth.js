@@ -19,10 +19,11 @@ const protect = async (req, res, next) => {
 
     try {
       // Verificar el token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'tu_clave_secreta_super_segura');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Obtener el usuario del token
+      // Buscar el usuario
       const user = await User.findById(decoded.id).select('-password');
+      
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -34,6 +35,7 @@ const protect = async (req, res, next) => {
       req.user = user;
       next();
     } catch (error) {
+      console.error('Error al verificar token:', error);
       return res.status(401).json({
         success: false,
         message: 'No autorizado - Token inválido'
@@ -41,12 +43,31 @@ const protect = async (req, res, next) => {
     }
   } catch (error) {
     console.error('Error en middleware de autenticación:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: 'Error en el servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 };
 
-module.exports = { protect }; 
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'No autorizado - Usuario no autenticado'
+      });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'No autorizado - Rol no permitido'
+      });
+    }
+
+    next();
+  };
+};
+
+module.exports = { protect, authorize }; 

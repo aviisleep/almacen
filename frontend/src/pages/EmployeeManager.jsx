@@ -1,582 +1,318 @@
 import React, { useState, useEffect } from "react";
+import { useTools } from '../contexts/ToolsContext';
+import { employeesApi } from '../utils/api/employeesApi';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function EmployeeManager() {
-  // Estados principales
-  const [employees, setEmployees] = useState([]);
-  const [inventory, setInventory] = useState([]);
-  const [newEmployee, setNewEmployee] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    position: "",
-    birthDate: ""
-  });
-  const [selectedEmployee, setSelectedEmployee] = useState({
-    deliveries: [] // Inicializa con array vacío
-  });
+  const { 
+    employees, 
+    loading: contextLoading, 
+    error: contextError, 
+    loadEmployees,
+    loadTools
+  } = useTools();
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  // Formularios
   const [employeeForm, setEmployeeForm] = useState({
-    id: null,
+    _id: null,
     name: "",
     email: "",
     phone: "",
     position: "",
-    birthDate: ""
+    birthDate: "",
+    active: true
   });
+
   const [deliveryForm, setDeliveryForm] = useState({
     empleadoId: null,
     productoId: null,
-    productName: "",
     cantidad: 0,
   });
 
-  // Cargar datos iniciales desde el backend
-  useEffect(() => {
-    fetchEmployees();
-    fetchProducts();
-  }, []);
-
-  // Obtener la lista de empleados
-  const fetchEmployees = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/api/employees");
-      if (!response.ok) throw new Error("Error al cargar los empleados");
-      const data = await response.json();
-      setEmployees(data);
-    } catch (error) {
-      console.error("Error:", error.message);
-      alert(`Error al cargar los empleados: ${error.message}`);
-    }
-  };
-
-  // Obtener la lista de productos
-  const fetchProducts = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/api/products");
-      if (!response.ok) throw new Error("Error al cargar los productos");
-      const data = await response.json();
-      setInventory(Array.isArray(data.data) ? data.data : []);
-    } catch (error) {
-      console.error("Error:", error.message);
-      alert(`Error al cargar los productos: ${error.message}`);
-      setInventory([]);
-    }
-  };
-
-  // Manejar cambios en el formulario
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-  
-    // Si el campo que se cambia es el producto, también actualizamos el productName
-    if (name === 'productoId') {
-      // Busca el producto en el inventario
-      const selectedProduct = inventory.find(p => p._id === value);
-  
-      // Actualiza el estado de newEmployee, agregando el productName basado en el producto seleccionado
-      setNewEmployee((prev) => ({
-        ...prev,
-        [name]: value,  // Actualiza el producto seleccionado
-        productName: selectedProduct ? selectedProduct.nombre : '', // Asigna el nombre del producto
-      }));
-    } else {
-      // Si no es el producto, solo actualiza el valor como en el código original
-      setNewEmployee((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  // Agregar un nuevo empleado
+  // Agregar nuevo empleado
   const handleAddEmployee = async (e) => {
     e.preventDefault();
-    if (!newEmployee.name.trim()) {
-      alert("El nombre del empleado es obligatorio.");
+    
+    // Validaciones
+    if (!employeeForm.name) {
+      setError('El nombre es un campo obligatorio');
       return;
     }
-    fetchEmployees();
+
+    if (!employeeForm.position) {
+      setError('El cargo es un campo obligatorio');
+      return;
+    }
+
     try {
-      const response = await fetch("http://localhost:5000/api/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newEmployee),
-      });
+      setLoading(true);
+      setError(null);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al crear el empleado");
+      // Preparar datos para enviar
+      const employeeData = {
+        name: employeeForm.name,
+        email: employeeForm.email || null,
+        phone: employeeForm.phone || null,
+        position: employeeForm.position,
+        birthDate: employeeForm.birthDate ? formatDateForAPI(employeeForm.birthDate) : null,
+        active: employeeForm.active
+      };
+
+      const response = await employeesApi.create(employeeData);
+      
+      if (response?.success) {
+        await loadEmployees(); // Recargar empleados después de crear uno nuevo
+        setEmployeeForm({
+          _id: null,
+          name: "",
+          email: "",
+          phone: "",
+          position: "",
+          birthDate: "",
+          active: true
+        });
+        setIsAddModalOpen(false);
+        toast.success('Empleado creado exitosamente');
+      } else {
+        throw new Error(response?.message || "Error al crear el empleado");
       }
-
-      const data = await response.json();
-      setEmployees([...employees, data]);
-      setNewEmployee({ name: "", email: "", phone: "", position: "" });
-      setIsAddModalOpen(false);
-      alert("Empleado agregado correctamente.");
     } catch (error) {
-      alert(`Error al agregar el empleado: ${error.message}`);
+      console.error("Error al crear empleado:", error);
+      if (error.error === "EMAIL_DUPLICATE") {
+        toast.error("Ya existe un empleado con este email. Por favor, use un email diferente.");
+      } else {
+        toast.error(error.message || "Error al crear el empleado");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Editar un empleado existente
+  // Editar empleado existente
   const handleEditEmployee = async (e) => {
     e.preventDefault();
-    if (!employeeForm.name.trim()) {
-      alert("El nombre del empleado es obligatorio.");
+    
+    // Validaciones
+    if (!employeeForm._id) {
+      setError('ID de empleado no válido');
       return;
     }
-    fetchEmployees();
+
+    if (!employeeForm.name) {
+      setError('El nombre es un campo obligatorio');
+      return;
+    }
+
+    if (!employeeForm.position) {
+      setError('El cargo es un campo obligatorio');
+      return;
+    }
+
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/employees/${employeeForm.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(employeeForm),
-        }
-      );
+      setLoading(true);
+      setError(null);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al editar el empleado");
+      // Preparar datos para enviar
+      const employeeData = {
+        name: employeeForm.name,
+        email: employeeForm.email || null,
+        phone: employeeForm.phone || null,
+        position: employeeForm.position,
+        birthDate: employeeForm.birthDate ? formatDateForAPI(employeeForm.birthDate) : null,
+        active: employeeForm.active
+      };
+      
+      const response = await employeesApi.update(employeeForm._id, employeeData);
+
+      if (response?.success) {
+        await loadEmployees(); // Recargar empleados después de editar
+        setEmployeeForm({
+          _id: null,
+          name: "",
+          email: "",
+          phone: "",
+          position: "",
+          birthDate: "",
+          active: true
+        });
+        setIsEditModalOpen(false);
+        toast.success('Empleado actualizado exitosamente');
+      } else {
+        throw new Error(response?.message || 'Error al editar el empleado');
       }
-
-      const updatedEmployee = await response.json();
-      setEmployees((prev) =>
-        prev.map((emp) => (emp._id === updatedEmployee._id ? updatedEmployee : emp))
-      );
-      setEmployeeForm({ id: null, name: "", email: "", phone: "", position: "" });
-      setIsEditModalOpen(false);
-      alert("Empleado editado correctamente.");
     } catch (error) {
-      alert(`Error al editar el empleado: ${error.message}`);
+      console.error("Error al editar empleado:", error);
+      if (error.error === "EMAIL_DUPLICATE") {
+        toast.error("Ya existe un empleado con este email. Por favor, use un email diferente.");
+      } else {
+        toast.error(error.message || 'Error al editar el empleado');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Eliminar un empleado
+  // Eliminar empleado
   const handleDeleteEmployee = async (id) => {
     if (!window.confirm("¿Estás seguro de eliminar este empleado?")) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/employees/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al eliminar el empleado");
+      setLoading(true);
+      setError(null);
+      
+      const response = await employeesApi.delete(id);
+      
+      if (response?.success) {
+        // Forzar una recarga completa de los empleados
+        await loadEmployees();
+        // Actualizar también las herramientas si es necesario
+        await loadTools();
+        toast.success('Empleado eliminado exitosamente');
+      } else {
+        throw new Error(response?.message || "Error al eliminar el empleado");
       }
-
-      setEmployees((prev) => prev.filter((emp) => emp._id !== id));
-      alert("Empleado eliminado correctamente.");
     } catch (error) {
-      alert(`Error al eliminar el empleado: ${error.message}`);
+      console.error("Error al eliminar empleado:", error);
+      toast.error(error.message || "Error al eliminar el empleado");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Asignar un producto a un empleado
+  // Asignar producto a empleado
   const assignProductToEmployee = async (e) => {
-    e.preventDefault()
-    
-    const { empleadoId, productoId, cantidad } = deliveryForm;
-
-    if (!empleadoId || !productoId || !cantidad || cantidad <= 0) {
-      alert("Por favor complete todos los campos correctamente");
-      return;
-    }
-
+    e.preventDefault();
     try {
-      const product = inventory.find((p) => p._id === productoId);
-      
-      if (!product || product.cantidad < cantidad) {
-        alert("No hay suficiente cantidad disponible.");
-        return;
+      setLoading(true);
+      setError(null);
+      const response = await employeesApi.deliverProduct(
+        deliveryForm.empleadoId,
+        deliveryForm.productoId,
+        deliveryForm.cantidad
+      );
+
+      if (response?.success) {
+        await Promise.all([
+          loadEmployees(),
+          loadTools()
+        ]);
+        setDeliveryForm({
+          empleadoId: null,
+          productoId: null,
+          cantidad: 0
+        });
+        setIsDeliveryModalOpen(false);
+        toast.success('Producto asignado exitosamente');
+      } else {
+        throw new Error(response?.message || "Error al asignar el producto");
       }
-
- // Preparar datos para enviar al backend (ajustar a lo que espera el modelo)
-    const deliveryData = {
-      empleadoId: empleadoId,
-      productId: productoId,  // El modelo espera productId
-      productName: product.nombre, // Asegurar que el nombre del producto se envía
-      cantidad: cantidad,     // El modelo espera cantidad, no cantidad
-      date: new Date().toISOString()
-    };
-
- // Enviar solicitud al backend
-  
-      const response = await fetch("http://localhost:5000/api/employees/deliver-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(deliveryData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error en la respuesta del servidor");
-      }
-
-       // Actualizar estados locales
-      const result = await response.json();
-
-      // 1. Actualizar inventario
-    const updatedInventory = inventory.map(p => 
-      p._id === productoId ? { ...p, cantidad: p.cantidad - cantidad } : p
-    );
-    setInventory(updatedInventory);
-    
-    // 2. Actualizar lista de empleados
-    setEmployees(prevEmployees => 
-      prevEmployees.map(emp => 
-        emp._id === empleadoId 
-          ? { ...emp, deliveries: [...(emp.deliveries || []), result.delivery] } 
-          : emp
-      )
-    );
-     
-    // 3. Actualizar empleado seleccionado si es el mismo
-    if (selectedEmployee?._id === empleadoId) {
-      setSelectedEmployee(prev => ({
-        ...prev,
-        deliveries: [...(prev.deliveries || []), result.delivery]
-      }));
+    } catch (error) {
+      console.error("Error al asignar producto:", error);
+      toast.error(error.message || "Error al asignar el producto");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    fetchEmployees(); // Refrescar la lista de empleados después de la entrega
+  // Formatear fecha para input type="date"
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
 
-    // Cerrar modal y resetear formulario
-    setIsDeliveryModalOpen(false);
-    setDeliveryForm({ empleadoId: null, productoId: null, cantidad: 0 });
-    
-    alert("Producto asignado correctamente");
-    
-  } catch (error) {
-    console.error("Error:", error);
-    alert(`Error al asignar producto: ${error.message}`);
+  // Formatear fecha para API
+  const formatDateForAPI = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString();
+  };
+
+  // Manejar cambios en los inputs
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setEmployeeForm(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  if (loading || contextLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
-};
+
+  if (error || contextError) {
+    const errorMessage = error?.message || contextError?.message || 'Ha ocurrido un error';
+    return (
+      <div className="bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">{errorMessage}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">Gestión de Empleados</h2>
+    <div className="container mx-auto px-4 py-8">
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Gestión de Empleados</h1>
+        <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Agregar Empleado
+        </button>
+      </div>
 
-      {/* Botón para abrir el modal de agregar empleado */}
-      <button
-        onClick={() => setIsAddModalOpen(true)}
-        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-      >
-        Agregar Empleado
-      </button>
-
-      {/* Botón para abrir el modal de asignar productos */}
-      <button
-        onClick={() => setIsDeliveryModalOpen(true)}
-        className="ml-4 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-      >
-        Asignar Producto
-      </button>
-
-     {/* Modal para agregar empleado */}
-{isAddModalOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
-    <div
-      className="fixed inset-0 bg-black opacity-50"
-      onClick={() => setIsAddModalOpen(false)}
-    ></div>
-    <div className="relative bg-white rounded-lg p-8 max-w-md mx-auto z-50">
-      <h3 className="text-lg font-semibold mb-4">Agregar Empleado</h3>
-
-      <form onSubmit={handleAddEmployee} className="space-y-4">
-        {/* Nombre */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Nombre</label>
-          <input
-            type="text"
-            name="name"
-            value={newEmployee.name}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            required
-          />
-        </div>
-
-        {/* Email */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Email</label>
-          <input
-            type="email"
-            name="email"
-            value={newEmployee.email || ""}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Teléfono */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Teléfono</label>
-          <input
-            type="text"
-            name="phone"
-            value={newEmployee.phone || ""}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Cargo */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Cargo</label>
-          <input
-            type="text"
-            name="position"
-            value={newEmployee.position || ""}
-            onChange={handleInputChange}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            required
-          />
-        </div>
-
-        {/* Botones */}
-        <div className="flex justify-end space-x-4 mt-6">
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(false)}
-            className="py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            Agregar
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
-
-      {/* Modal para asignar productos */}
-      {isDeliveryModalOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
-    <div
-      className="fixed inset-0 bg-black opacity-50"
-      onClick={() => setIsDeliveryModalOpen(false)}
-    ></div>
-    <div className="relative bg-white rounded-lg p-8 max-w-md mx-auto z-50">
-      <h3 className="text-lg font-semibold mb-4">Asignar Producto a Empleado</h3>
-      <form onSubmit={assignProductToEmployee} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Empleado
-          </label>
-          <select
-            name="empleadoId"
-            value={deliveryForm.empleadoId || ""}
-            onChange={(e) =>
-              setDeliveryForm({ ...deliveryForm, empleadoId: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un empleado</option>
-            {employees.map((employee) => (
-              <option key={employee._id} value={employee._id}>
-                {employee.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Selección del producto */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Producto
-          </label>
-          <select
-            name="productoId"
-            value={deliveryForm.productoId || ""}
-            onChange={(e) => {
-              const selectedProduct = inventory.find(p => p._id === e.target.value);
-              setDeliveryForm({ 
-                ...deliveryForm, 
-                productoId: e.target.value,
-                productName: selectedProduct ? selectedProduct.nombre : '' // Asignar el nombre del producto
-              });
-            }}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {inventory.map((product) => (
-              <option key={product._id} value={product._id}>
-                {product.nombre} - {product.cantidad} disponibles
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Cantidad */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Cantidad
-          </label>
-          <input
-            type="number"
-            name="cantidad"
-            value={deliveryForm.cantidad}
-            onChange={(e) =>
-              setDeliveryForm({ ...deliveryForm, cantidad: +e.target.value })
-            }
-            min="1"
-            max={
-              inventory.find(
-                (product) => product._id === deliveryForm.productoId
-              )?.cantidad || 0
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Botones */}
-        <div className="flex justify-end space-x-4 mt-6">
-          <button
-            type="button"
-            onClick={() => setIsDeliveryModalOpen(false)}
-            className="py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Asignar
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-      )}
-
-      {/* Modal para editar empleado */}
-{isEditModalOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto">
-    <div
-      className="fixed inset-0 bg-black opacity-50"
-      onClick={() => setIsEditModalOpen(false)}
-    ></div>
-    <div className="relative bg-white rounded-lg p-8 max-w-md mx-auto z-50">
-      <h3 className="text-lg font-semibold mb-4">Editar Empleado</h3>
-      <form onSubmit={handleEditEmployee} className="space-y-4">
-        {/* Campo Nombre */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Nombre Completo
-          </label>
-          <input
-            type="text"
-            name="name"
-            value={employeeForm.name}
-            onChange={(e) =>
-              setEmployeeForm({ ...employeeForm, name: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            required
-          />
-        </div>
-
-        {/* Campo Email */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <input
-            type="email"
-            name="email"
-            value={employeeForm.email}
-            onChange={(e) =>
-              setEmployeeForm({ ...employeeForm, email: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Campo Teléfono */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Teléfono
-          </label>
-          <input
-            type="tel"
-            name="phone"
-            value={employeeForm.phone}
-            onChange={(e) =>
-              setEmployeeForm({ ...employeeForm, phone: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Campo Cargo/Posición */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Cargo/Posición
-          </label>
-          <input
-            type="text"
-            name="position"
-            value={employeeForm.position}
-            onChange={(e) =>
-              setEmployeeForm({ ...employeeForm, position: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            required
-          />
-        </div>
-
-        {/* Campo Fecha de Nacimiento (si aplica) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Fecha de Nacimiento
-          </label>
-          <input
-            type="date"
-            name="birthDate"
-            value={employeeForm.birthDate || ''}
-            onChange={(e) =>
-              setEmployeeForm({ ...employeeForm, birthDate: e.target.value })
-            }
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-        </div>
-
-        {/* Botones de acción */}
-        <div className="flex justify-end space-x-4 pt-4">
-          <button
-            type="button"
-            onClick={() => setIsEditModalOpen(false)}
-            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            Guardar Cambios
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
-
-      {/* Tabla de empleados */}
-      <div className="mt-8">
-        <h3 className="text-lg font-semibold mb-4">Lista de Empleados</h3>
+      {/* Lista de empleados */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Nombre
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Email
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Teléfono
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Cargo
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
@@ -586,26 +322,42 @@ function EmployeeManager() {
           <tbody className="bg-white divide-y divide-gray-200">
             {employees.map((employee) => (
               <tr key={employee._id}>
-                <td
-                  className="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600 cursor-pointer"
-                  onClick={() => setSelectedEmployee(employee)}
-                >
-                  {employee.name}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">{employee.name}</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 space-x-2">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-500">{employee.email}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-500">{employee.phone}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-500">{employee.position}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    employee.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    {employee.active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
                     onClick={() => {
+                      console.log('Empleado seleccionado:', employee);
+                      setSelectedEmployee(employee);
                       setEmployeeForm({
-                        id: employee._id,
-                        name: employee.name,         // <-- Campo correcto
+                        _id: employee._id,
+                        name: employee.name || "",
                         email: employee.email || "",
                         phone: employee.phone || "",
                         position: employee.position || "",
-                        birthDate: employee.birthDate || ""
+                        birthDate: formatDateForInput(employee.birthDate),
+                        active: employee.active || false
                       });
                       setIsEditModalOpen(true);
                     }}
-                    className="text-indigo-600 hover:text-indigo-900"
+                    className="text-blue-600 hover:text-blue-900 mr-4"
                   >
                     Editar
                   </button>
@@ -622,58 +374,179 @@ function EmployeeManager() {
         </table>
       </div>
 
-      {/* Detalles del empleado seleccionado */}
-      {selectedEmployee && (
-  <div className="mt-8">
-    <h3 className="text-lg font-semibold mb-4">Detalles del Empleado</h3>
-    <p className="text-sm text-gray-700">
-      <strong>Nombre:</strong> {selectedEmployee.name}
-    </p>
-    
-    {/* Historial de entregas - Versión segura */}
-    <div className="mt-4">
-      <h4 className="text-md font-medium mb-2">Historial de Entregas</h4>
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Producto
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Cantidad
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Fecha
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {selectedEmployee.deliveries?.length > 0 ? (
-            selectedEmployee.deliveries
-              .filter(delivery => delivery) // Filtra entregas undefined
-              .map((delivery) => (
-                <tr key={delivery?.productId || delivery?._id || Math.random()}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {delivery?.productName || 
-                    (inventory.find((p) => p?._id === delivery?.productId)?.nombre || "Producto no especificado")}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {delivery?.cantidad ?? "N/A"}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {delivery?.date ? new Date(delivery.date).toLocaleDateString() : "Sin fecha"}
-                  </td>
-                </tr>
-              ))
-          ) : (
-            <tr>
-              <td colSpan="3" className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                No hay entregas registradas para este empleado.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      {/* Modal para agregar/editar empleado */}
+      {(isAddModalOpen || isEditModalOpen) && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-lg font-medium mb-4">
+              {isAddModalOpen ? 'Agregar Empleado' : 'Editar Empleado'}
+            </h2>
+            <form onSubmit={isAddModalOpen ? handleAddEmployee : handleEditEmployee}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Nombre *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={employeeForm.name || ''}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={employeeForm.email || ''}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Teléfono</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={employeeForm.phone || ''}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Cargo</label>
+                  <input
+                    type="text"
+                    name="position"
+                    value={employeeForm.position || ''}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Fecha de Nacimiento</label>
+                  <input
+                    type="date"
+                    name="birthDate"
+                    value={formatDateForInput(employeeForm.birthDate)}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    checked={employeeForm.active || false}
+                    onChange={handleInputChange}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-900">Activo</label>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setIsEditModalOpen(false);
+                    setEmployeeForm({
+                      _id: null,
+                      name: "",
+                      email: "",
+                      phone: "",
+                      position: "",
+                      birthDate: "",
+                      active: true
+                    });
+                  }}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  {isAddModalOpen ? 'Agregar' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para asignar producto */}
+      {isDeliveryModalOpen && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-lg font-medium mb-4">Asignar Producto</h2>
+            <form onSubmit={assignProductToEmployee}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Empleado</label>
+                  <select
+                    value={deliveryForm.empleadoId || ''}
+                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, empleadoId: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Seleccionar empleado</option>
+                    {employees.map(emp => (
+                      <option key={emp._id} value={emp._id}>{emp.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Producto</label>
+                  <select
+                    value={deliveryForm.productoId || ''}
+                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, productoId: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Seleccionar producto</option>
+                    {contextInventory?.map(prod => (
+                      <option key={prod._id} value={prod._id}>{prod.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={deliveryForm.cantidad}
+                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, cantidad: parseInt(e.target.value) }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeliveryModalOpen(false);
+                    setDeliveryForm({
+                      empleadoId: null,
+                      productoId: null,
+                      cantidad: 0
+                    });
+                  }}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Asignar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -681,4 +554,4 @@ function EmployeeManager() {
   );
 }
 
-export default EmployeeManager;
+export default EmployeeManager; 

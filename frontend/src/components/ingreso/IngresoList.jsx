@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ClockIcon,
   CalendarIcon,
@@ -14,11 +14,36 @@ import {
   CubeIcon,
   DevicePhoneMobileIcon,
   ShoppingBagIcon,
-  IdentificationIcon, // Importa este ícono
+  IdentificationIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+
+// Componente para el modal de imagen
+const ImageModal = ({ isOpen, onClose, imageUrl }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+      <div className="relative max-w-4xl w-full">
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-white hover:text-gray-300"
+        >
+          <XMarkIcon className="h-8 w-8" />
+        </button>
+        <img
+          src={imageUrl}
+          alt="Vista completa"
+          className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+        />
+      </div>
+    </div>
+  );
+};
 
 export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
   const [expandedId, setExpandedId] = React.useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id);
@@ -157,43 +182,119 @@ export const IngresoList = ({ ingresos, loading, onEdit, onDelete }) => {
                 {ingreso.fotosEntrada && ingreso.fotosEntrada.length > 0 && (
                   <>
                     <h4 className="text-sm font-medium text-gray-500 mb-3">Fotos del vehículo</h4>
-                    <div className="flex flex-wrap gap-3">
-                      {ingreso.fotosEntrada.map((foto, index) => (
-                        <img
-                          key={index}
-                          src={foto}
-                          alt={`Foto del vehículo ${ingreso.vehiculo.placa}`}
-                          className="h-24 w-24 object-cover rounded border border-gray-200"
-                        />
-                      ))}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {ingreso.fotosEntrada.map((foto, index) => {
+                        // La URL ya viene completa del backend
+                        const fotoUrl = foto;
+                        
+                        return (
+                          <div
+                            key={index}
+                            className="relative aspect-square cursor-pointer group bg-white rounded-lg overflow-hidden border border-gray-200"
+                            onClick={() => setSelectedImage(fotoUrl)}
+                          >
+                            <img
+                              src={fotoUrl}
+                              alt={`Foto ${index + 1} del vehículo ${ingreso.vehiculo.placa}`}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                              onError={(e) => {
+                                console.error('Error al cargar imagen:', fotoUrl);
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2YjcyODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5FcnJvciBhbCBjYXJnYXIgaW1hZ2VuPC90ZXh0Pjwvc3ZnPg==';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity duration-200"></div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}
-              </div>
 
-              {/* Acciones */}
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => onDelete(ingreso._id)}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <TrashIcon className="h-4 w-4 mr-2" />
-                  Eliminar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onEdit(ingreso)}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <PencilIcon className="h-4 w-4 mr-2" />
-                  Editar
-                </button>
+                {/* Firmas */}
+                {ingreso.firmas && (
+                  <>
+                    <h4 className="text-sm font-medium text-gray-500 mt-6 mb-3">Firmas</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {ingreso.firmas.encargado && (
+                        <div className="border rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Firma del encargado</h5>
+                          <div 
+                            className="cursor-pointer"
+                            onClick={() => setSelectedImage(ingreso.firmas.encargado)}
+                          >
+                            <img
+                              src={ingreso.firmas.encargado}
+                              alt="Firma del encargado"
+                              className="w-full h-32 object-contain bg-white"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2YjcyODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5FcnJvciBhbCBjYXJnYXIgaW1hZ2VuPC90ZXh0Pjwvc3ZnPg==';
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {ingreso.firmas.conductor && (
+                        <div className="border rounded-lg p-4">
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Firma del conductor</h5>
+                          <div 
+                            className="cursor-pointer"
+                            onClick={() => setSelectedImage(ingreso.firmas.conductor)}
+                          >
+                            <img
+                              src={ingreso.firmas.conductor}
+                              alt="Firma del conductor"
+                              className="w-full h-32 object-contain bg-white"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM2YjcyODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5FcnJvciBhbCBjYXJnYXIgaW1hZ2VuPC90ZXh0Pjwvc3ZnPg==';
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Botones de acción */}
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm('¿Está seguro de que desea eliminar este ingreso?')) {
+                        onDelete(ingreso._id);
+                      }
+                    }}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  >
+                    <TrashIcon className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(ingreso);
+                    }}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <PencilIcon className="h-4 w-4 mr-2" />
+                    Editar
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
       ))}
+
+      {/* Modal de imagen */}
+      <ImageModal
+        isOpen={!!selectedImage}
+        onClose={() => setSelectedImage(null)}
+        imageUrl={selectedImage}
+      />
     </div>
   );
 };

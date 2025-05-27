@@ -1,4 +1,5 @@
 const Product = require('../models/product');
+const mongoose = require('mongoose');
 
 // Obtener todos los productos
 const getProducts = async (req, res) => {
@@ -61,7 +62,6 @@ const countProducts = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     // Validar que el ID sea válido
-    const mongoose = require('mongoose');
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: "ID de producto inválido" });
     }
@@ -93,48 +93,52 @@ const createProduct = async (req, res) => {
     // Validar campos obligatorios
     if (!nombre || !cantidad || cantidad <= 0 || !precio || precio <= 0) {
       return res.status(400).json({ 
+        success: false,
         message: "Nombre, cantidad y precio son obligatorios, y deben ser mayores a cero." 
       });
     }
 
-    // Buscar si el producto ya existe
-    let product = await Product.findOne({ nombre });
-
-    if (product) {
-      // Si el producto ya existe, incrementar la cantidad
-      product.cantidad += cantidad;
-      product.historial.push({
-        accion: "Compra",
-        detalles: `Se agregaron ${cantidad} unidades al inventario.`,
-      });
-    } else {
-      // Si el producto no existe, crear uno nuevo
-      product = new Product({
-        nombre,
-        descripcion,
-        cantidad,
-        precio,
-        categoria,
-      });
-      product.historial.push({
-        accion: "Compra",
-        detalles: `Producto creado con ${cantidad} unidades y precio $${precio}.`,
+    // Validar categoría
+    const categoriasValidas = ['Herramienta', 'Consumible', 'Repuesto', 'Insumo', 'Otro'];
+    if (categoria && !categoriasValidas.includes(categoria)) {
+      return res.status(400).json({
+        success: false,
+        message: `Categoría inválida. Las categorías válidas son: ${categoriasValidas.join(', ')}`
       });
     }
 
-    // Guardar el producto (el SKU se genera automáticamente en el middleware pre('save'))
+    // Crear el producto
+    const product = new Product({
+      nombre,
+      descripcion,
+      cantidad,
+      precio,
+      categoria: categoria || 'Otro',
+      historial: [{
+        accion: "Compra",
+        detalles: `Producto creado con ${cantidad} unidades y precio $${precio}.`,
+        fecha: new Date()
+      }]
+    });
+
+    // Guardar el producto
     const savedProduct = await product.save();
 
-    // Devolver el producto completo (incluyendo el SKU generado)
+    // Devolver el producto creado
     res.status(201).json({ 
+      success: true,
       message: "Producto agregado al inventario exitosamente", 
       data: savedProduct 
     });
   } catch (error) {
-    console.error("Error al crear el producto:", error.message);
-    res.status(500).json({ message: "Error interno del servidor." });
+    console.error("Error al crear el producto:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Error interno del servidor.",
+      error: error.message 
+    });
   }
-}
+};
 
 // Actualizar un producto por ID
 const updateProduct = async (req, res) => {
@@ -198,79 +202,95 @@ const updateProductcantidad = async (req, res) => {
       return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
     }
 
-    // Buscar el producto por ID
+    // Buscar el producto
     const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ message: "Producto no encontrado" });
     }
 
-    // Actualizar la cantidad del producto
+    // Calcular la diferencia de cantidad
+    const diferencia = cantidad - product.cantidad;
+    
+    // Actualizar la cantidad
     product.cantidad = cantidad;
 
-    // Guardar los cambios en la base de datos
+    // Agregar entrada al historial
+    product.historial.push({
+      accion: diferencia > 0 ? "Ajuste de stock" : "Reducción de stock",
+      detalles: `Cantidad ajustada a ${cantidad} unidades (${diferencia > 0 ? '+' : ''}${diferencia})`,
+      fecha: new Date()
+    });
+
+    // Guardar los cambios
     await product.save();
 
-    // Devolver el producto actualizado
-    res.status(200).json(product);
+    res.json({
+      success: true,
+      message: "Cantidad actualizada exitosamente",
+      data: product
+    });
   } catch (error) {
-    console.error("Error al actualizar la cantidad del producto:", error.message);
-    res.status(500).json({ message: "Error al actualizar el producto", error: error.message });
+    console.error("Error al actualizar la cantidad:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor",
+      error: error.message 
+    });
   }
 };
 
-// Agregar un producto al inventario (opcional, si se necesita)
+// Agregar producto al inventario
 const addProductToInventory = async (req, res) => {
   try {
-    const { nombre, descripcion, cantidad, categoria } = req.body;
+    const { id } = req.params;
+    const { cantidad } = req.body;
 
-    // Validar campos obligatorios
-    if (!nombre || !cantidad || cantidad <= 0) {
-      return res.status(400).json({ message: "Nombre y cantidad son obligatorios, y la cantidad debe ser mayor a cero." });
+    // Validar que la cantidad sea un número positivo
+    if (!cantidad || cantidad <= 0) {
+      return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
     }
 
-    // Buscar si el producto ya existe
-    let product = await Product.findOne({ nombre });
-
-    if (product) {
-      // Si el producto ya existe, incrementar la cantidad
-      product.cantidad += cantidad;
-      product.historial.push({
-        accion: "Compra",
-        detalles: `Se agregaron ${cantidad} unidades al inventario.`,
-      });
-    } else {
-      // Si el producto no existe, crear uno nuevo
-      product = new Product({
-        SKU: generateSKU(), // Función para generar SKU único
-        nombre,
-        descripcion,
-        cantidad,
-        categoria,
-      });
-      product.historial.push({
-        accion: "Compra",
-        detalles: `Producto creado con ${cantidad} unidades.`,
-      });
+    // Buscar el producto
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Producto no encontrado" });
     }
 
+    // Actualizar la cantidad
+    product.cantidad += cantidad;
+
+    // Agregar entrada al historial
+    product.historial.push({
+      accion: "Agregado al inventario",
+      detalles: `Se agregaron ${cantidad} unidades al inventario`,
+      fecha: new Date()
+    });
+
+    // Guardar los cambios
     await product.save();
-    res.status(201).json({ message: "Producto agregado al inventario exitosamente", data: product });
+
+    res.json({
+      success: true,
+      message: "Producto agregado al inventario exitosamente",
+      data: product
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error al agregar producto al inventario:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor",
+      error: error.message 
+    });
   }
 };
 
-// para devolver un producto al inventario
+// Devolver producto al inventario
 const returnProductToInventory = async (req, res) => {
   try {
-    const { productId } = req.params; // ID del producto
-    const { cantidad, employeeId, vehicleId } = req.body;
+    const { productId } = req.params;
+    const { cantidad, motivo } = req.body;
 
-    // Validaciones
-    if (!mongoose.Types.ObjectId.isValid(productId)) {
-      return res.status(400).json({ message: "ID de producto inválido" });
-    }
-
+    // Validar que la cantidad sea un número positivo
     if (!cantidad || cantidad <= 0) {
       return res.status(400).json({ message: "La cantidad debe ser mayor a cero." });
     }
@@ -281,78 +301,72 @@ const returnProductToInventory = async (req, res) => {
       return res.status(404).json({ message: "Producto no encontrado" });
     }
 
-    // Incrementar el stock del inventario
+    // Actualizar la cantidad
     product.cantidad += cantidad;
+
+    // Agregar entrada al historial
     product.historial.push({
-      accion: "Devolución",
-      detalles: `Se devolvieron ${cantidad} unidades al inventario.`,
+      accion: "Devolución al inventario",
+      detalles: `Se devolvieron ${cantidad} unidades al inventario. Motivo: ${motivo || 'No especificado'}`,
+      fecha: new Date()
     });
+
+    // Guardar los cambios
     await product.save();
 
-    // Si se proporciona un employeeId, actualizar su historial
-    if (employeeId && mongoose.Types.ObjectId.isValid(employeeId)) {
-      const employee = await Employee.findById(employeeId);
-      if (employee) {
-        const delivery = employee.deliveries.find((d) => d.productId.equals(productId));
-        if (delivery) {
-          delivery.cantidad -= cantidad; // Reducir la cantidad entregada
-          if (delivery.cantidad <= 0) {
-            employee.deliveries.pull(delivery); // Eliminar si la cantidad llega a cero
-          }
-          await employee.save();
-        }
-      }
-    }
-
-    // Si se proporciona un vehicleId, actualizar su historial
-    if (vehicleId && mongoose.Types.ObjectId.isValid(vehicleId)) {
-      const vehicle = await Vehicle.findById(vehicleId);
-      if (vehicle) {
-        const assignedProduct = vehicle.productosAsignados.find((p) => p.productId.equals(productId));
-        if (assignedProduct) {
-          assignedProduct.cantidad -= cantidad; // Reducir la cantidad asignada
-          if (assignedProduct.cantidad <= 0) {
-            vehicle.productosAsignados.pull(assignedProduct); // Eliminar si la cantidad llega a cero
-          }
-          await vehicle.save();
-        }
-      }
-    }
-
-    res.status(200).json({ message: "Producto devuelto exitosamente", data: product });
+    res.json({
+      success: true,
+      message: "Producto devuelto al inventario exitosamente",
+      data: product
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error al devolver producto al inventario:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor",
+      error: error.message 
+    });
   }
 };
 
 // Obtener el historial de un producto
 const getProductHistory = async (req, res) => {
   try {
-    const { id } = req.params; // ID del producto
+    const { id } = req.params;
 
-    // Validar que el ID sea válido
+    // Validar el ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "ID de producto inválido" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "ID de producto inválido" 
+      });
     }
 
-    // Buscar el producto
+    // Buscar el producto y obtener su historial
     const product = await Product.findById(id);
     if (!product) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Producto no encontrado" 
+      });
     }
 
-    // Devolver el historial del producto
+    // Ordenar el historial por fecha descendente (más reciente primero)
+    const historialOrdenado = product.historial.sort((a, b) => b.fecha - a.fecha);
+
     res.json({
       success: true,
-      data: product.historial,
+      data: historialOrdenado
     });
   } catch (error) {
-    console.error("Error al obtener el historial del producto:", error.message);
-    res.status(500).json({ success: false, message: "Error interno del servidor." });
+    console.error("Error al obtener el historial del producto:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor",
+      error: error.message 
+    });
   }
 };
-
-
 
 module.exports = {
   getProducts,

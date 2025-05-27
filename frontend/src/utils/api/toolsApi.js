@@ -35,9 +35,13 @@ export const toolsApi = {
   },
 
   // Actualizar una herramienta
-  update: async (id, toolData) => {
+update: async (id, toolData) => {
     try {
-      const response = await api.put(`/tools/${id}`, toolData);
+      const toolId = typeof id === 'object' ? id.id : id; // Extrae el ID si es un objeto
+      if (!toolId || typeof toolId !== 'string') {
+        throw new Error('ID de herramienta inválido');
+      }
+      const response = await api.put(`/tools/${toolId}`, toolData);
       return response.data.data;
     } catch (error) {
       console.error(`Error al actualizar herramienta ${id}:`, error);
@@ -46,23 +50,28 @@ export const toolsApi = {
   },
 
   // Eliminar una herramienta
-  delete: async (id) => {
+delete: async (id) => {
     try {
       const response = await api.delete(`/tools/${id}`);
-      return response.data.data;
+      return {
+        success: true,
+        message: response.data.message || 'Herramienta eliminada correctamente'
+      };
     } catch (error) {
       console.error(`Error al eliminar herramienta ${id}:`, {
-        status: error.status,
-        message: error.message,
-        data: error.data
+        status: error.response?.status,
+        message: error.response?.data?.message || error.message,
+        data: error.response?.data
       });
-      
-      if (error.status === 403) {
+
+      if (error.response?.status === 403) {
         throw new Error('No tienes permisos para eliminar herramientas. Por favor, contacta al administrador.');
-      } else if (error.status === 401) {
+      } else if (error.response?.status === 401) {
         throw new Error('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+      } else if (error.response?.status === 404) {
+        throw new Error('La herramienta no fue encontrada.');
       } else {
-        throw new Error(error.message || 'Error al eliminar la herramienta');
+        throw new Error(error.response?.data?.message || 'Error al eliminar la herramienta');
       }
     }
   },
@@ -106,15 +115,9 @@ export const toolsApi = {
   // Obtener herramientas asignadas
   getAssigned: async () => {
     try {
-      const response = await api.get('/tools');
-      if (response.data.success && Array.isArray(response.data.data)) {
-        return response.data.data.filter(tool => 
-          tool.historial && 
-          tool.historial.length > 0 && 
-          tool.historial[tool.historial.length - 1].accion === 'asignacion'
-        );
-      }
-      return [];
+      const response = await api.get('/tools/assigned');
+      console.log('Respuesta de herramientas asignadas:', response);
+      return response.data.data || [];
     } catch (error) {
       console.error('Error al obtener herramientas asignadas:', error);
       throw error;

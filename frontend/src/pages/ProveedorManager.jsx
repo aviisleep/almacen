@@ -29,9 +29,17 @@ export default function ProveedorManager() {
       const response = await fetch("http://localhost:5000/api/proveedores");
       const data = await response.json();
       console.log("Datos recibidos del backend:", data);
-      setProveedores(data);
+      // Asegurarse de que data sea un array y que cada elemento tenga _id
+      if (Array.isArray(data)) {
+        setProveedores(data.filter(proveedor => proveedor && proveedor._id));
+      } else if (data.data && Array.isArray(data.data)) {
+        setProveedores(data.data.filter(proveedor => proveedor && proveedor._id));
+      } else {
+        setProveedores([]);
+      }
     } catch (error) {
       console.error("Error al cargar los proveedores:", error);
+      setProveedores([]);
     }
   };
 
@@ -178,51 +186,58 @@ export default function ProveedorManager() {
               Dirección
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Número
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Acciones
             </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-  {proveedores.length > 0 ? (
-    proveedores
-      .filter((proveedor) => proveedor && proveedor._id) // Filtra elementos inválidos
-      .map((proveedor) => (
-        <tr key={proveedor._id}>
-          <td
-            className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 cursor-pointer"
-            onClick={() => openDetailsModal(proveedor)}
-          >
-            {proveedor.nombre}
-          </td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proveedor.empresa}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proveedor.direccion}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{proveedor.numero}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 flex space-x-2">
-            <button
-              title="Editar"
-              className="text-yellow-500 hover:text-yellow-700"
-              onClick={() => openEditModal(proveedor)}
-            >
-              ✏️
-            </button>
-            <button
-              title="Eliminar"
-              className="text-red-500 hover:text-red-700"
-              onClick={() => handleDelete(proveedor._id)}
-            >
-              🗑️
-            </button>
-          </td>
-        </tr>
-      ))
-  ) : (
-    <tr>
-      <td colSpan="4" className="text-center">
-        No hay proveedores disponibles.
-      </td>
-    </tr>
-  )}
-</tbody>
+          {proveedores && proveedores.length > 0 ? (
+            proveedores.map((proveedor) => (
+              <tr key={proveedor._id}>
+                <td
+                  className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 cursor-pointer"
+                  onClick={() => openDetailsModal(proveedor)}
+                >
+                  {proveedor.nombre || 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {proveedor.empresa || 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {proveedor.direccion || 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {proveedor.numero || 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 flex space-x-2">
+                  <button
+                    title="Editar"
+                    className="text-yellow-500 hover:text-yellow-700"
+                    onClick={() => openEditModal(proveedor)}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    title="Eliminar"
+                    className="text-red-500 hover:text-red-700"
+                    onClick={() => handleDelete(proveedor._id)}
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                No hay proveedores disponibles.
+              </td>
+            </tr>
+          )}
+        </tbody>
       </table>
 
       {/* Modal para crear proveedores */}

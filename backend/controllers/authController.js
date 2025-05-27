@@ -1,100 +1,136 @@
 const User = require('../models/user');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { sendResponse, handleError } = require('../utils/responseHandler');
 
-// @desc    Registrar un nuevo usuario (solo admin)
+// Generar JWT
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '30d'
+  });
+};
+
+// @desc    Registrar usuario
 // @route   POST /api/auth/register
-// @access  Private/Admin
-const registerUser = async (req, res) => {
+// @access  Public
+const register = async (req, res) => {
   try {
     const { nombre, email, password, role } = req.body;
 
-    // Verificar si el usuario que hace la petición es admin
-    if (req.user.role !== 'admin') {
-      return handleError(res, 'No autorizado - Solo los administradores pueden crear usuarios', 403);
-    }
-
-    // Verificar si el email ya existe
+    // Verificar si el usuario ya existe
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return handleError(res, 'El email ya está registrado', 400);
+      return res.status(400).json({
+        success: false,
+        message: 'El usuario ya existe'
+      });
     }
 
-    // Crear el usuario
+    // Encriptar contraseña
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Crear usuario
     const user = await User.create({
       nombre,
       email,
-      password,
-      role: role || 'empleado' // Por defecto es empleado si no se especifica
+      password: hashedPassword,
+      role: role || 'empleado'
     });
 
-    sendResponse(res, 201, {
-      _id: user._id,
-      nombre: user.nombre,
-      email: user.email,
-      role: user.role
-    });
+    if (user) {
+      res.status(201).json({
+        success: true,
+        data: {
+          _id: user._id,
+          nombre: user.nombre,
+          email: user.email,
+          role: user.role,
+          token: generateToken(user._id)
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Datos de usuario inválidos'
+      });
+    }
   } catch (error) {
-    handleError(res, error.message);
+    console.error('Error en registro:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al registrar usuario'
+    });
   }
 };
 
-// @desc    Iniciar sesión
+// @desc    Login usuario
 // @route   POST /api/auth/login
 // @access  Public
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Verificar email y password
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Por favor ingrese email y contraseña'
-      });
-    }
-
-    // Buscar usuario y verificar contraseña
+    // Verificar si el usuario existe
     const user = await User.findOne({ email }).select('+password');
-    if (!user || !(await user.matchPassword(password))) {
+    if (!user) {
       return res.status(401).json({
         success: false,
         message: 'Credenciales inválidas'
       });
     }
 
-    // Verificar si el usuario está activo
-    if (!user.active) {
+    // Verificar contraseña
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Usuario inactivo'
+        message: 'Credenciales inválidas'
       });
     }
 
-    // Actualizar último login
-    user.lastLogin = Date.now();
-    await user.save({ validateBeforeSave: false });
-
-    // Generar token
-    const token = user.getSignedJwtToken();
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: {
-        token,
-        user: {
-          _id: user._id,
-          nombre: user.nombre,
-          email: user.email,
-          role: user.role
-        }
+        _id: user._id,
+        nombre: user.nombre,
+        email: user.email,
+        role: user.role,
+        token: generateToken(user._id)
       }
     });
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al iniciar sesión',
-      error: error.message
+      message: 'Error al iniciar sesión'
+    });
+  }
+};
+
+// @desc    Obtener usuario actual
+// @route   GET /api/auth/me
+// @access  Private
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    console.error('Error al obtener usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener usuario'
     });
   }
 };
@@ -108,34 +144,38 @@ const changePassword = async (req, res) => {
 
     // Verificar que se proporcionen ambas contraseñas
     if (!currentPassword || !newPassword) {
-      return handleError(res, 'Por favor ingrese la contraseña actual y la nueva contraseña', 400);
+      return res.status(400).json({
+        success: false,
+        message: 'Por favor ingrese la contraseña actual y la nueva contraseña'
+      });
     }
 
     // Buscar usuario y verificar contraseña actual
     const user = await User.findById(req.user._id).select('+password');
-    if (!(await user.matchPassword(currentPassword))) {
-      return handleError(res, 'Contraseña actual incorrecta', 401);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Contraseña actual incorrecta'
+      });
     }
 
-    // Actualizar contraseña
-    user.password = newPassword;
+    // Encriptar nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
 
-    sendResponse(res, 200, { message: 'Contraseña actualizada exitosamente' });
+    res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
   } catch (error) {
-    handleError(res, error.message);
-  }
-};
-
-// @desc    Obtener perfil del usuario actual
-// @route   GET /api/auth/me
-// @access  Private
-const getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    sendResponse(res, 200, user);
-  } catch (error) {
-    handleError(res, error.message);
+    console.error('Error al cambiar contraseña:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al cambiar contraseña'
+    });
   }
 };
 
@@ -152,7 +192,10 @@ const updateMe = async (req, res) => {
 
     // No permitir actualizar contraseña o rol desde aquí
     if (req.body.password || req.body.role) {
-      return handleError(res, 'No se puede actualizar la contraseña o el rol desde esta ruta', 400);
+      return res.status(400).json({
+        success: false,
+        message: 'No se puede actualizar la contraseña o el rol desde esta ruta'
+      });
     }
 
     const user = await User.findByIdAndUpdate(
@@ -161,9 +204,16 @@ const updateMe = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    sendResponse(res, 200, user);
+    res.json({
+      success: true,
+      data: user
+    });
   } catch (error) {
-    handleError(res, error.message);
+    console.error('Error al actualizar perfil:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al actualizar perfil'
+    });
   }
 };
 
@@ -175,28 +225,41 @@ const deactivateUser = async (req, res) => {
     const user = await User.findById(req.params.id);
     
     if (!user) {
-      return handleError(res, 'Usuario no encontrado', 404);
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
     }
 
     // No permitir desactivar a otros admins
     if (user.role === 'admin' && req.user._id.toString() !== user._id.toString()) {
-      return handleError(res, 'No se puede desactivar a otro administrador', 403);
+      return res.status(403).json({
+        success: false,
+        message: 'No se puede desactivar a otro administrador'
+      });
     }
 
     user.active = false;
     await user.save();
 
-    sendResponse(res, 200, { message: 'Usuario desactivado exitosamente' });
+    res.json({
+      success: true,
+      message: 'Usuario desactivado exitosamente'
+    });
   } catch (error) {
-    handleError(res, error.message);
+    console.error('Error al desactivar usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al desactivar usuario'
+    });
   }
 };
 
 module.exports = {
-  registerUser,
+  register,
   login,
-  changePassword,
   getMe,
+  changePassword,
   updateMe,
   deactivateUser
 }; 
